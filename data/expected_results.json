@@ -1,0 +1,50 @@
+{
+  "NS01": {
+    "ruling": "refund",
+    "refund_cents": 500
+  },
+  "NS02": {
+    "ruling": "no_action",
+    "refund_cents": 0
+  },
+  "NS03": {
+    "ruling": "refund",
+    "refund_cents": 500
+  },
+  "NS04": {
+    "ruling": "human_review",
+    "refund_cents": 0
+  },
+  "NS05": {
+    "ruling": "human_review",
+    "refund_cents": 0
+  },
+  "NS06": {
+    "ruling": "no_action",
+    "refund_cents": 0
+  },
+  "RT01": {
+    "ruling": "refund",
+    "refund_cents": 369
+  },
+  "RT02": {
+    "ruling": "no_action",
+    "refund_cents": 0
+  },
+  "RT03": {
+    "ruling": "no_action",
+    "refund_cents": 0
+  },
+  "RT04": {
+    "ruling": "human_review",
+    "refund_cents": 0
+  },
+  "RT05": {
+    "ruling": "no_action",
+    "refund_cents": 0
+  },
+  "RT06": {
+    "ruling": "human_review",
+    "refund_cents": 0
+  }
+}

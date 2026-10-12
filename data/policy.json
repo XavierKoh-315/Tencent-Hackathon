@@ -1,0 +1,18 @@
+{
+  "version": "demo-v1",
+  "demo_only": true,
+  "notice": "Invented demonstration rules, not Ryde's actual policies. Replace with organiser-provided policies before presenting as company policy.",
+  "review_confidence_threshold": 0.7,
+  "route": {"deviation_ratio_threshold": 1.2, "rate_per_km_cents": 200},
+  "no_show": {"pickup_radius_m": 100, "minimum_verified_wait_seconds": 300},
+  "clauses": {
+    "DEMO-ROUTE-01": {
+      "id": "DEMO-ROUTE-01",
+      "text": "With complete route and authorisation records, an unapproved and operationally unjustified actual route exceeding 120% of the supplied reference route qualifies for an excess-distance fare refund. Calculate excess polyline distance in km times 200 cents/km, round half up to whole cents, and cap at charged fare minus the reference fare. An approved or operationally verified detour does not qualify. Missing route or authorisation evidence requires human review. The supplied reference route is a synthetic baseline, not a computed optimal road route."
+    },
+    "DEMO-NOSHOW-01": {
+      "id": "DEMO-NOSHOW-01",
+      "text": "A cancellation fee is valid only when timestamped GPS observations establish the driver stayed within 100 metres of the agreed pickup point for a verified interval of at least 300 seconds. Observations must be chronological, on or after arrival and on or before cancellation. Out-of-radius observations or insufficient verified waiting require a full fee refund. Missing or inconsistent observations require human review. Sparse samples are assumed complete only in this synthetic prototype; production requires robust continuous telemetry. If no fee was charged, no refund is due."
+    }
+  }
+}

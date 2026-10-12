@@ -1,0 +1,211 @@
+# Ride Dispute Review — hackathon starter
+
+A runnable Python/Streamlit starter for the Ryde multi-agent dispute challenge.
+The interface accepts a complaint and a synthetic trip ID, shows evidence retrieval,
+two advocates' cases, a judge recommendation, policy checks and a case report.
+
+**Status:** offline flow and local tests are implemented. The ADP adapter is included;
+an actual provider session still requires your published ADP application and local
+AppKey. Offline mode is a deterministic demonstration, not a real AI submission.
+CodeBuddy/WorkBuddy usage proof must come from your own genuine development work.
+
+## First milestone: open the local application
+
+1. Install and sign in to Tencent's international CodeBuddy IDE:
+   https://www.codebuddy.ai/
+   Official installation guide:
+   https://www.codebuddy.ai/docs/ide/Getting-Started/Installation
+2. Extract this ZIP and open the **ryde_dispute_starter** folder in CodeBuddy.
+   You should see `app.py` and `requirements.txt` directly in that folder.
+3. Open CodeBuddy's terminal. These commands work in Windows Command Prompt or
+   PowerShell without activating the environment:
+
+```text
+py --version
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m streamlit run app.py
+```
+
+Python 3.10 or newer is required. If the `py` launcher is unavailable but `python`
+works and reports a supported version, use `python` for the first two commands.
+If neither command works, install Python from https://www.python.org/downloads/windows/
+and reopen the terminal.
+
+4. Open the localhost URL shown in the terminal, normally http://localhost:8501.
+5. Keep **Offline demo**, select **NS01**, then click **Investigate dispute**.
+   Expected: **Refund recommended — S$5.00**.
+6. Select **NS02**, investigate: **Charge retained — S$0.00**.
+7. Select **RT01**, investigate: **Refund recommended — S$3.69**.
+8. Select **NS04**, investigate: **Human review required** because GPS is absent.
+
+The first investigation also creates a local SQLite case log under `runtime/`.
+Do not represent offline template arguments as real AI outputs.
+
+## Use CodeBuddy for the next development step
+
+Open **CODEBUDDY_START.md** and paste its first prompt into CodeBuddy's project chat.
+The prompt asks CodeBuddy to inspect the starter and implement a useful evidence
+timeline. Save genuine conversation screenshots during planning, implementation
+and testing; keep the minimum three screenshots for submission.
+
+This starter was prepared with ChatGPT assistance. Your development description
+should accurately describe both that assistance and your own CodeBuddy work.
+It does not contain fabricated CodeBuddy screenshots or claim to have used that tool.
+
+## Second milestone: connect real ADP agents
+
+1. Open the international ADP platform: https://adp.tencentcloud.com/
+   Sign in or register using the organiser's ADP guide. An individual account can
+   skip company information and card binding according to that supplied guide.
+2. In **App Dev**, create a **Standard Mode** agent application. Name it
+   `ride-dispute-prototype` or another name of your choice.
+3. Choose a text model available in your account. Keep model configuration in ADP;
+   the optional `ADP_MODEL_NAME` setting can stay blank.
+4. Suggested base role instruction:
+
+```text
+You are a prototype ride dispute agent. Follow the current role instruction and
+the supplied evidence. Return a single valid JSON object without markdown.
+Use only supplied demo policies and evidence; identify missing facts explicitly.
+```
+
+5. Test a simple JSON answer in the ADP debug panel, then **publish** the app.
+   Confirm it is running. Copy its **AppKey** from the published application's
+   API/service-status area. Console labels may vary by release.
+6. Copy `.env.example` to `.env` in the project folder. Fill in the AppKey locally:
+
+```text
+ADP_APP_KEY=your_actual_published_application_key
+ADP_ENDPOINT=https://wss.lke.tencentcloud.com/adp/v2/chat
+ADP_MODEL_NAME=
+ADP_TIMEOUT_SECONDS=45
+```
+
+Keep the real key in your local `.env` or hosting secret settings. Do not paste it
+into ChatGPT, a CodeBuddy conversation, screenshots or the GitHub repository.
+
+7. In the running app, choose **ADP live AI**, select **NS01** and investigate.
+   A successful investigation makes five model calls: two evidence-tool plans,
+   two advocate case arguments and one judge recommendation. It uses three
+   separate conversation contexts, with a fresh set for each investigation.
+8. Check the visible evidence IDs, each advocate's case, the judge's policy
+   references and the two party-facing messages. Do not infer success merely
+   from an HTTP 200 response.
+
+ADP's HTTP SSE reference:
+https://www.tencentcloud.com/document/product/1254/81449
+The adapter uses the published app's AppKey, per-call SystemRole and independent
+ConversationId values. It reads reply messages and excludes thought/procedure text.
+Credentials and provider error response bodies are not included in saved case logs.
+
+ADP usage depends on your account's model allowance. Development-tool credits and
+ADP runtime allowance are separate; check the console before repeated live evaluation.
+No live provider requests were made when preparing this starter.
+
+## Architecture
+
+```mermaid
+flowchart TD
+    A["Complaint and trip ID"] --> B["Python coordinator"]
+    B --> C["Rider Advocate"]
+    B --> D["Driver Advocate"]
+    C <--> E["Read-only evidence tools"]
+    D <--> E
+    C --> F["Judge"]
+    D --> F
+    E --> F
+    F --> G["Policy validation"]
+    G --> H["Recommendation and case log"]
+```
+
+- `app.py`: Streamlit interface and local result persistence.
+- `disputes/core.py`: trip-scoped tools, coordinator, arithmetic and policy validator.
+- `disputes/adp.py`: ADP API adapter, response parsing and safe provider errors.
+- `disputes/prompts.py`: separate evidence-planning, advocate and judge prompts.
+- `data/cases.json`: 12 synthetic cases across both required categories.
+- `data/policy.json`: explicitly invented demonstration policies, version `demo-v1`.
+- `data/expected_results.json`: expected policy outcomes used only by evaluation/tests.
+- `evaluate.py`: offline or live comparison against the labelled synthetic scenarios.
+- `tests/`: policy checks, monetary bounds, context isolation and protocol parsing.
+
+Each advocate selects tools in live mode. Python executes the selected read-only
+tools against the current trip. The judge receives both cases and the full retrieved
+record. It chooses a recommendation; a separate validator checks the monetary and
+policy result. A disagreement or low confidence produces human review.
+
+## Tests and evaluation
+
+Run the standard-library tests; these need no provider key:
+
+```text
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe evaluate.py --mode offline
+```
+
+On macOS/Linux use `python3 -m venv .venv`, then `.venv/bin/python` in place of the
+Windows executable path throughout this guide.
+
+Expected offline policy results: 12/12 labelled scenarios. This checks the
+deterministic demo baseline, **not AI accuracy, production accuracy or business ROI**.
+The route refund for RT01 is S$3.69: the synthetic GPS polyline excess is approximately
+1.84266 km at 200 cents/km, rounded half up, below the 500-cent excess-fare cap.
+
+Once configured, this command runs the 12 scenarios against actual ADP calls:
+
+```text
+.\.venv\Scripts\python.exe evaluate.py --mode adp
+```
+
+That makes up to 60 model calls and consumes provider allowance. Record the measured
+outcome agreement and latency honestly; do not reuse the offline result as an AI score.
+
+## Data and prototype limitations
+
+- Everything in the sample dataset is synthetic. The policies are not Ryde's policies.
+  Ask the organiser for the promised sample dataset and relevant actual policy rules,
+  then update the evidence adapters and policy configuration consistently.
+- Polyline distance is a GPS-data estimate. The reference route is supplied; the
+  prototype does not find an optimal route on a road network or model traffic.
+- Sparse pickup samples are assumed complete only for the declared synthetic cases.
+  Production needs accuracy bounds, gaps, spoofing checks and continuous telemetry.
+- Ratings, account age and past disputes alone do not decide guilt or refund eligibility.
+- Confidence is a prototype heuristic/model self-assessment, not calibrated accuracy.
+- Citation-ID checks validate references, not the semantic truth of every AI sentence.
+- No real refunds are issued and no messages are transmitted to riders/drivers.
+- This local single-user app is a hackathon prototype. Production authentication,
+  per-user access control, secure hosted persistence and operational review processes
+  remain future work.
+
+## Two-day priorities
+
+Day 1: open the offline app; use CodeBuddy for a real interface/data improvement;
+configure ADP; run one live dispute from complaint to explained recommendation.
+
+Day 2: verify both categories in live mode; improve evidence/policy citations; test
+missing/contradictory records and review routing; measure live results; prepare the
+architecture diagram, GitHub repository and demonstration.
+
+## Submission checklist from the supplied Singapore handbook
+
+Ryde challenge, pages 22–25:
+- Three core agents using text and structured evidence.
+- Working end-to-end flow for at least two categories.
+- Visible agent communication, architecture diagram, demonstration walkthrough.
+- Complete source code in a GitHub repository.
+
+General submission rules, page 36:
+- Original project built using at least CodeBuddy or WorkBuddy, with genuine proof.
+- Minimum three development-conversation screenshots/screen recordings.
+- Project title, short blurb strictly under ten words and project description.
+- Description covers users/scenarios, solution design, prompts and business value.
+- 16:9 cover image.
+- Optional 5–8 minute demo video and optional live URL (the latter earns bonus points).
+
+Submission deadline: 16 October 2026, according to the supplied handbook. Follow any
+updated track instructions from the organiser. Keep actual credentials out of materials.
+
+Sources used for requirements: the user-supplied **AI CAN DO IT Tencent Cloud AI
+Singapore Hackathon 2026 Handbook.pdf**, **ADP_Hackathon_Guide_EN.pdf**, and official
+ADP API / Streamlit documentation. This archive does not include or redistribute
+the supplied handbook PDFs.

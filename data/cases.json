@@ -1,0 +1,725 @@
+[
+  {
+    "synthetic": true,
+    "messages": [
+      {
+        "timestamp": "2026-10-08T16:00:00+08:00",
+        "sender": "driver",
+        "text": "I am at the pickup point."
+      },
+      {
+        "timestamp": "2026-10-08T16:01:00+08:00",
+        "sender": "rider",
+        "text": "I cannot see your car."
+      }
+    ],
+    "history": {
+      "rider": {
+        "account_age_days": 200,
+        "rating": 4.8,
+        "previous_disputes": 1
+      },
+      "driver": {
+        "account_age_days": 500,
+        "rating": 4.9,
+        "previous_disputes": 2
+      }
+    },
+    "payment": {
+      "charged_cents": 500,
+      "cancellation_fee_cents": 500,
+      "reference_fare_cents": 0
+    },
+    "trip": {
+      "pickup": {
+        "lat": 1.3,
+        "lon": 103.8
+      },
+      "arrived_at": "2026-10-08T16:00:00+08:00",
+      "cancelled_at": "2026-10-08T16:06:00+08:00",
+      "pickup_presence_samples": [
+        {
+          "lat": 1.303,
+          "lon": 103.8,
+          "timestamp": "2026-10-08T16:00:00+08:00"
+        },
+        {
+          "lat": 1.303,
+          "lon": 103.8,
+          "timestamp": "2026-10-08T16:03:00+08:00"
+        },
+        {
+          "lat": 1.303,
+          "lon": 103.8,
+          "timestamp": "2026-10-08T16:06:00+08:00"
+        }
+      ]
+    },
+    "trip_id": "NS01",
+    "title": "Driver at the wrong pickup point",
+    "category": "no_show",
+    "complaint": "The driver did not arrive at my pickup point, but I was charged S$5."
+  },
+  {
+    "synthetic": true,
+    "messages": [
+      {
+        "timestamp": "2026-10-08T16:00:00+08:00",
+        "sender": "driver",
+        "text": "I am at the pickup point."
+      },
+      {
+        "timestamp": "2026-10-08T16:01:00+08:00",
+        "sender": "rider",
+        "text": "I cannot see your car."
+      }
+    ],
+    "history": {
+      "rider": {
+        "account_age_days": 200,
+        "rating": 4.8,
+        "previous_disputes": 1
+      },
+      "driver": {
+        "account_age_days": 500,
+        "rating": 4.9,
+        "previous_disputes": 2
+      }
+    },
+    "payment": {
+      "charged_cents": 500,
+      "cancellation_fee_cents": 500,
+      "reference_fare_cents": 0
+    },
+    "trip": {
+      "pickup": {
+        "lat": 1.3,
+        "lon": 103.8
+      },
+      "arrived_at": "2026-10-08T16:00:00+08:00",
+      "cancelled_at": "2026-10-08T16:06:00+08:00",
+      "pickup_presence_samples": [
+        {
+          "lat": 1.3,
+          "lon": 103.8,
+          "timestamp": "2026-10-08T16:00:00+08:00"
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.8,
+          "timestamp": "2026-10-08T16:03:00+08:00"
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.8,
+          "timestamp": "2026-10-08T16:06:00+08:00"
+        }
+      ]
+    },
+    "trip_id": "NS02",
+    "title": "Driver waited at the correct point",
+    "category": "no_show",
+    "complaint": "I could not find the driver and want the S$5 cancellation fee refunded."
+  },
+  {
+    "synthetic": true,
+    "messages": [
+      {
+        "timestamp": "2026-10-08T16:00:00+08:00",
+        "sender": "driver",
+        "text": "I am at the pickup point."
+      },
+      {
+        "timestamp": "2026-10-08T16:01:00+08:00",
+        "sender": "rider",
+        "text": "I cannot see your car."
+      }
+    ],
+    "history": {
+      "rider": {
+        "account_age_days": 200,
+        "rating": 4.8,
+        "previous_disputes": 1
+      },
+      "driver": {
+        "account_age_days": 500,
+        "rating": 4.9,
+        "previous_disputes": 2
+      }
+    },
+    "payment": {
+      "charged_cents": 500,
+      "cancellation_fee_cents": 500,
+      "reference_fare_cents": 0
+    },
+    "trip": {
+      "pickup": {
+        "lat": 1.3,
+        "lon": 103.8
+      },
+      "arrived_at": "2026-10-08T16:00:00+08:00",
+      "cancelled_at": "2026-10-08T16:02:00+08:00",
+      "pickup_presence_samples": [
+        {
+          "lat": 1.3,
+          "lon": 103.8,
+          "timestamp": "2026-10-08T16:00:00+08:00"
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.8,
+          "timestamp": "2026-10-08T16:02:00+08:00"
+        }
+      ]
+    },
+    "trip_id": "NS03",
+    "title": "Driver cancelled too early",
+    "category": "no_show",
+    "complaint": "The driver cancelled after only two minutes and charged me S$5."
+  },
+  {
+    "synthetic": true,
+    "messages": [
+      {
+        "timestamp": "2026-10-08T16:00:00+08:00",
+        "sender": "driver",
+        "text": "I am at the pickup point."
+      },
+      {
+        "timestamp": "2026-10-08T16:01:00+08:00",
+        "sender": "rider",
+        "text": "I cannot see your car."
+      }
+    ],
+    "history": {
+      "rider": {
+        "account_age_days": 200,
+        "rating": 4.8,
+        "previous_disputes": 1
+      },
+      "driver": {
+        "account_age_days": 500,
+        "rating": 4.9,
+        "previous_disputes": 2
+      }
+    },
+    "payment": {
+      "charged_cents": 500,
+      "cancellation_fee_cents": 500,
+      "reference_fare_cents": 0
+    },
+    "trip": {
+      "pickup": {
+        "lat": 1.3,
+        "lon": 103.8
+      },
+      "arrived_at": "2026-10-08T16:00:00+08:00",
+      "cancelled_at": "2026-10-08T16:06:00+08:00",
+      "pickup_presence_samples": []
+    },
+    "trip_id": "NS04",
+    "title": "Pickup GPS is missing",
+    "category": "no_show",
+    "complaint": "The driver never arrived, but I was charged S$5."
+  },
+  {
+    "synthetic": true,
+    "messages": [
+      {
+        "timestamp": "2026-10-08T16:00:00+08:00",
+        "sender": "driver",
+        "text": "I am at the pickup point."
+      },
+      {
+        "timestamp": "2026-10-08T16:01:00+08:00",
+        "sender": "rider",
+        "text": "I cannot see your car."
+      }
+    ],
+    "history": {
+      "rider": {
+        "account_age_days": 200,
+        "rating": 4.8,
+        "previous_disputes": 1
+      },
+      "driver": {
+        "account_age_days": 500,
+        "rating": 4.9,
+        "previous_disputes": 2
+      }
+    },
+    "payment": {
+      "charged_cents": 500,
+      "cancellation_fee_cents": 500,
+      "reference_fare_cents": 0
+    },
+    "trip": {
+      "pickup": {
+        "lat": 1.3,
+        "lon": 103.8
+      },
+      "arrived_at": "2026-10-08T16:00:00+08:00",
+      "cancelled_at": "2026-10-08T16:06:00+08:00",
+      "pickup_presence_samples": [
+        {
+          "lat": 1.3,
+          "lon": 103.8,
+          "timestamp": "2026-10-08T16:00:00+08:00"
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.8,
+          "timestamp": "2026-10-08T16:03:00+08:00"
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.8,
+          "timestamp": "2026-10-08T16:08:00+08:00"
+        }
+      ]
+    },
+    "trip_id": "NS05",
+    "title": "Telemetry is later than cancellation",
+    "category": "no_show",
+    "complaint": "Please review the cancellation fee; the driver says they waited."
+  },
+  {
+    "synthetic": true,
+    "messages": [
+      {
+        "timestamp": "2026-10-08T16:00:00+08:00",
+        "sender": "driver",
+        "text": "I am at the pickup point."
+      },
+      {
+        "timestamp": "2026-10-08T16:01:00+08:00",
+        "sender": "rider",
+        "text": "I cannot see your car."
+      }
+    ],
+    "history": {
+      "rider": {
+        "account_age_days": 200,
+        "rating": 4.8,
+        "previous_disputes": 1
+      },
+      "driver": {
+        "account_age_days": 500,
+        "rating": 4.9,
+        "previous_disputes": 2
+      }
+    },
+    "payment": {
+      "charged_cents": 0,
+      "cancellation_fee_cents": 0,
+      "reference_fare_cents": 0
+    },
+    "trip": {
+      "pickup": {
+        "lat": 1.3,
+        "lon": 103.8
+      },
+      "arrived_at": "2026-10-08T16:00:00+08:00",
+      "cancelled_at": "2026-10-08T16:06:00+08:00",
+      "pickup_presence_samples": [
+        {
+          "lat": 1.3,
+          "lon": 103.8,
+          "timestamp": "2026-10-08T16:00:00+08:00"
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.8,
+          "timestamp": "2026-10-08T16:03:00+08:00"
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.8,
+          "timestamp": "2026-10-08T16:06:00+08:00"
+        }
+      ]
+    },
+    "trip_id": "NS06",
+    "title": "No fee was charged",
+    "category": "no_show",
+    "complaint": "I want my cancellation fee back."
+  },
+  {
+    "synthetic": true,
+    "messages": [
+      {
+        "timestamp": "2026-10-08T16:00:00+08:00",
+        "sender": "rider",
+        "text": "Please follow the agreed route."
+      },
+      {
+        "timestamp": "2026-10-08T16:10:00+08:00",
+        "sender": "driver",
+        "text": "I took a longer route without asking first."
+      }
+    ],
+    "history": {
+      "rider": {
+        "account_age_days": 200,
+        "rating": 4.8,
+        "previous_disputes": 1
+      },
+      "driver": {
+        "account_age_days": 500,
+        "rating": 4.9,
+        "previous_disputes": 2
+      }
+    },
+    "payment": {
+      "charged_cents": 1700,
+      "cancellation_fee_cents": 0,
+      "reference_fare_cents": 1200
+    },
+    "trip": {
+      "reference_route": [
+        {
+          "lat": 1.3,
+          "lon": 103.8
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.82
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.84
+        }
+      ],
+      "actual_route": [
+        {
+          "lat": 1.3,
+          "lon": 103.8
+        },
+        {
+          "lat": 1.32,
+          "lon": 103.82
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.84
+        }
+      ],
+      "detour_approved": false,
+      "verified_operational_reason": false
+    },
+    "trip_id": "RT01",
+    "title": "Unapproved detour with excess fare",
+    "category": "route_deviation",
+    "complaint": "The driver took a longer route without asking and charged more than the reference fare."
+  },
+  {
+    "synthetic": true,
+    "messages": [
+      {
+        "timestamp": "2026-10-08T16:00:00+08:00",
+        "sender": "driver",
+        "text": "Can we take the longer scenic route?"
+      },
+      {
+        "timestamp": "2026-10-08T16:01:00+08:00",
+        "sender": "rider",
+        "text": "Yes, I agree to the scenic route and fare."
+      }
+    ],
+    "history": {
+      "rider": {
+        "account_age_days": 200,
+        "rating": 4.8,
+        "previous_disputes": 1
+      },
+      "driver": {
+        "account_age_days": 500,
+        "rating": 4.9,
+        "previous_disputes": 2
+      }
+    },
+    "payment": {
+      "charged_cents": 1700,
+      "cancellation_fee_cents": 0,
+      "reference_fare_cents": 1200
+    },
+    "trip": {
+      "reference_route": [
+        {
+          "lat": 1.3,
+          "lon": 103.8
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.82
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.84
+        }
+      ],
+      "actual_route": [
+        {
+          "lat": 1.3,
+          "lon": 103.8
+        },
+        {
+          "lat": 1.32,
+          "lon": 103.82
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.84
+        }
+      ],
+      "detour_approved": true,
+      "verified_operational_reason": false
+    },
+    "trip_id": "RT02",
+    "title": "Rider approved the detour",
+    "category": "route_deviation",
+    "complaint": "The route was longer and I would like a refund."
+  },
+  {
+    "synthetic": true,
+    "messages": [
+      {
+        "timestamp": "2026-10-08T16:00:00+08:00",
+        "sender": "driver",
+        "text": "The reference road is closed; I will take the available detour."
+      }
+    ],
+    "history": {
+      "rider": {
+        "account_age_days": 200,
+        "rating": 4.8,
+        "previous_disputes": 1
+      },
+      "driver": {
+        "account_age_days": 500,
+        "rating": 4.9,
+        "previous_disputes": 2
+      }
+    },
+    "payment": {
+      "charged_cents": 1700,
+      "cancellation_fee_cents": 0,
+      "reference_fare_cents": 1200
+    },
+    "trip": {
+      "reference_route": [
+        {
+          "lat": 1.3,
+          "lon": 103.8
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.82
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.84
+        }
+      ],
+      "actual_route": [
+        {
+          "lat": 1.3,
+          "lon": 103.8
+        },
+        {
+          "lat": 1.32,
+          "lon": 103.82
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.84
+        }
+      ],
+      "detour_approved": false,
+      "verified_operational_reason": true,
+      "operational_record": {
+        "source": "synthetic road-closure record",
+        "reason": "The reference road was closed during this trip."
+      }
+    },
+    "trip_id": "RT03",
+    "title": "Verified road closure detour",
+    "category": "route_deviation",
+    "complaint": "The driver took a longer route and I was charged more."
+  },
+  {
+    "synthetic": true,
+    "messages": [
+      {
+        "timestamp": "2026-10-08T16:00:00+08:00",
+        "sender": "rider",
+        "text": "Please follow the agreed route."
+      },
+      {
+        "timestamp": "2026-10-08T16:10:00+08:00",
+        "sender": "driver",
+        "text": "I took a longer route without asking first."
+      }
+    ],
+    "history": {
+      "rider": {
+        "account_age_days": 200,
+        "rating": 4.8,
+        "previous_disputes": 1
+      },
+      "driver": {
+        "account_age_days": 500,
+        "rating": 4.9,
+        "previous_disputes": 2
+      }
+    },
+    "payment": {
+      "charged_cents": 1700,
+      "cancellation_fee_cents": 0,
+      "reference_fare_cents": 1200
+    },
+    "trip": {
+      "reference_route": [
+        {
+          "lat": 1.3,
+          "lon": 103.8
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.82
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.84
+        }
+      ],
+      "actual_route": [],
+      "detour_approved": false,
+      "verified_operational_reason": false
+    },
+    "trip_id": "RT04",
+    "title": "Actual route record is missing",
+    "category": "route_deviation",
+    "complaint": "The driver overcharged me by taking a longer route."
+  },
+  {
+    "synthetic": true,
+    "messages": [
+      {
+        "timestamp": "2026-10-08T16:00:00+08:00",
+        "sender": "driver",
+        "text": "Following the reference route."
+      }
+    ],
+    "history": {
+      "rider": {
+        "account_age_days": 200,
+        "rating": 4.8,
+        "previous_disputes": 1
+      },
+      "driver": {
+        "account_age_days": 500,
+        "rating": 4.9,
+        "previous_disputes": 2
+      }
+    },
+    "payment": {
+      "charged_cents": 1200,
+      "cancellation_fee_cents": 0,
+      "reference_fare_cents": 1200
+    },
+    "trip": {
+      "reference_route": [
+        {
+          "lat": 1.3,
+          "lon": 103.8
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.82
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.84
+        }
+      ],
+      "actual_route": [
+        {
+          "lat": 1.3,
+          "lon": 103.8
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.82
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.84
+        }
+      ],
+      "detour_approved": false,
+      "verified_operational_reason": false
+    },
+    "trip_id": "RT05",
+    "title": "Trip followed the reference route",
+    "category": "route_deviation",
+    "complaint": "I believe the driver took a longer route."
+  },
+  {
+    "synthetic": true,
+    "messages": [],
+    "history": {
+      "rider": {
+        "account_age_days": 200,
+        "rating": 4.8,
+        "previous_disputes": 1
+      },
+      "driver": {
+        "account_age_days": 500,
+        "rating": 4.9,
+        "previous_disputes": 2
+      }
+    },
+    "payment": {
+      "charged_cents": 1700,
+      "cancellation_fee_cents": 0,
+      "reference_fare_cents": 1200
+    },
+    "trip": {
+      "reference_route": [
+        {
+          "lat": 1.3,
+          "lon": 103.8
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.82
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.84
+        }
+      ],
+      "actual_route": [
+        {
+          "lat": 1.3,
+          "lon": 103.8
+        },
+        {
+          "lat": 1.32,
+          "lon": 103.82
+        },
+        {
+          "lat": 1.3,
+          "lon": 103.84
+        }
+      ],
+      "detour_approved": null,
+      "verified_operational_reason": false
+    },
+    "trip_id": "RT06",
+    "title": "Detour authorisation is unclear",
+    "category": "route_deviation",
+    "complaint": "I did not approve the longer route."
+  }
+]

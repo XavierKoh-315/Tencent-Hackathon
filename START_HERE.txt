@@ -1,0 +1,21 @@
+FIRST RUN (WINDOWS)
+
+1. Install and sign in to Tencent CodeBuddy: https://www.codebuddy.ai/
+2. Extract this archive. Open its ryde_dispute_starter folder in CodeBuddy.
+3. Open the terminal in that folder and run:
+
+py --version
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m streamlit run app.py
+
+4. Open the localhost URL shown by Streamlit, normally http://localhost:8501.
+5. In Offline demo mode choose NS01 and click Investigate dispute.
+   Expect Refund recommended, S$5.00.
+6. Open CODEBUDDY_START.md and use Prompt 1 for your first real CodeBuddy change.
+   Save the conversation screenshot.
+7. Follow README.md to publish an ADP app and add its AppKey to .env locally.
+
+Offline mode uses templates and deterministic rules. It makes no AI calls.
+ADP mode needs your credentials and provider allowance. Keep keys private.
+All trip records and policies in this starter are explicitly synthetic/demo-only.
