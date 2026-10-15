@@ -215,13 +215,20 @@ def _validate_multi_agent_ruling(obj: dict, charged_cents: int, clause_ids: set,
     return obj
 
 
-def resolve(case: dict, mode="offline", client=None, on_event=None) -> dict:
+def resolve(case: dict, mode="multi_agent", client=None, on_event=None) -> dict:
+    """Resolve a dispute.
+
+    The primary user-facing mode is ``multi_agent``, which sends one request
+    to the published ADP application. ``offline`` and ``adp`` (legacy Standard
+    Mode) are preserved for evaluation utilities and tests but are never
+    exposed in the Streamlit UI.
+    """
     start = time.perf_counter()
     case = copy.deepcopy(case)
     if case.get("category") not in {"route_deviation", "no_show"}:
         raise ValueError("This prototype supports route deviation and no-show disputes.")
     if mode not in {"offline", "adp", "multi_agent"} or (mode in {"adp", "multi_agent"} and client is None):
-        raise ValueError("Choose offline mode or provide an ADP client for live mode.")
+        raise ValueError("Choose a supported mode and provide an ADP client for live modes.")
     policy = load_policy()
     run_id = str(uuid.uuid4())
     trace = []

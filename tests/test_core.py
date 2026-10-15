@@ -67,18 +67,18 @@ class CoreTests(unittest.TestCase):
         expected = json.loads((ROOT / "data/expected_results.json").read_text())
         for key, case in self.cases.items():
             with self.subTest(trip=key):
-                verdict = resolve(case)["ruling"]
+                verdict = resolve(case, mode="offline")["ruling"]
                 self.assertEqual({k: verdict[k] for k in expected[key]}, expected[key])
 
     def test_low_ratings_do_not_change_policy_outcome(self):
         case = copy.deepcopy(self.cases["NS02"])
         case["history"]["rider"] = {"account_age_days": 1, "rating": 1.0, "previous_disputes": 100}
-        self.assertEqual(resolve(case)["ruling"]["ruling"], "no_action")
+        self.assertEqual(resolve(case, mode="offline")["ruling"]["ruling"], "no_action")
 
     def test_refund_does_not_exceed_supported_excess_fare(self):
         case = copy.deepcopy(self.cases["RT01"])
         case["payment"]["reference_fare_cents"] = case["payment"]["charged_cents"] - 25
-        self.assertEqual(resolve(case)["ruling"]["refund_cents"], 25)
+        self.assertEqual(resolve(case, mode="offline")["ruling"]["refund_cents"], 25)
 
     def test_provider_selects_tools_and_roles_are_isolated(self):
         client = ScriptedClient()
@@ -113,7 +113,7 @@ class CoreTests(unittest.TestCase):
             check_judge(obj, {"gps"}, {"p"}, 500)
 
     def test_results_persist_without_provider_secret(self):
-        result = resolve(self.cases["NS01"])
+        result = resolve(self.cases["NS01"], mode="offline")
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "cases.sqlite3"
             save_result(result, path)

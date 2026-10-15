@@ -1,4 +1,10 @@
-"""Evaluate the declared synthetic scenarios. Labels never go into agent inputs."""
+"""Evaluate the declared synthetic scenarios. Labels never go into agent inputs.
+
+This utility is separate from the Streamlit app. It supports:
+  --mode offline      — deterministic demo baseline (no AI calls)
+  --mode adp          — legacy single-agent ADP Standard Mode
+The app itself only exposes multi_agent mode to users.
+"""
 import argparse
 import json
 from pathlib import Path
@@ -9,13 +15,14 @@ from disputes.core import load_cases, resolve
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=["offline", "adp"], default="offline")
+    parser.add_argument("--mode", choices=["offline", "adp"], default="offline",
+                        help="offline = deterministic baseline; adp = legacy single-agent mode")
     args = parser.parse_args()
     root = Path(__file__).resolve().parent
     expected = json.loads((root / "data/expected_results.json").read_text())
     client = ADPClient(settings(root)) if args.mode == "adp" else None
     rows = []
-    print("Synthetic scenarios / demo-v1 policy / mode:", args.mode)
+    print(f"Synthetic scenarios / demo-v1 policy / mode: {args.mode}")
     for case in load_cases():
         result = resolve(case, mode=args.mode, client=client)
         verdict = result["ruling"]

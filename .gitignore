@@ -1,6 +1,22 @@
-.venv/
-.env
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Environment — never commit credentials
+.env
+*.env
+
+# Runtime artifacts
 runtime/
-.streamlit/secrets.toml
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

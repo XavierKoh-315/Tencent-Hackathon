@@ -1,12 +1,14 @@
 # Ride Dispute Review — hackathon starter
 
 A runnable Python/Streamlit starter for the Ryde multi-agent dispute challenge.
-The interface accepts a complaint and a synthetic trip ID, shows evidence retrieval,
-two advocates' cases, a judge recommendation, policy checks and a case report.
+The interface accepts a complaint and a synthetic trip ID, sends one request to a
+published Tencent ADP multi-agent application, and validates the Judge's final
+ruling against the demo policy and evidence IDs.
 
-**Status:** offline flow and local tests are implemented. The ADP adapter is included;
-an actual provider session still requires your published ADP application and local
-AppKey. Offline mode is a deterministic demonstration, not a real AI submission.
+**Status:** The ADP multi-agent integration is the only user-facing review mode.
+Offline evaluation utilities and tests are preserved separately for deterministic
+baseline checks but are never exposed in the UI. An actual provider session
+requires your published ADP application and local AppKey.
 CodeBuddy/WorkBuddy usage proof must come from your own genuine development work.
 
 ## First milestone: open the local application
@@ -33,11 +35,9 @@ If neither command works, install Python from https://www.python.org/downloads/w
 and reopen the terminal.
 
 4. Open the localhost URL shown in the terminal, normally http://localhost:8501.
-5. Keep **Offline demo**, select **NS01**, then click **Investigate dispute**.
-   Expected: **Refund recommended — S$5.00**.
-6. Select **NS02**, investigate: **Charge retained — S$0.00**.
-7. Select **RT01**, investigate: **Refund recommended — S$3.69**.
-8. Select **NS04**, investigate: **Human review required** because GPS is absent.
+5. Select **NS01**, enter the complaint, then click **Investigate dispute**.
+   The app sends one request to the published ADP multi-agent application.
+6. Select **RT01** and investigate to test a route-deviation case.
 
 The first investigation also creates a local SQLite case log under `runtime/`.
 Do not represent offline template arguments as real AI outputs.
@@ -119,15 +119,15 @@ flowchart TD
     G --> H["Recommendation and case log"]
 ```
 
-- `app.py`: Streamlit interface and local result persistence.
+- `app.py`: Streamlit interface (multi-agent mode only) and local result persistence.
 - `disputes/core.py`: trip-scoped tools, coordinator, arithmetic and policy validator.
-- `disputes/adp.py`: ADP API adapter, response parsing and safe provider errors.
-- `disputes/prompts.py`: separate evidence-planning, advocate and judge prompts.
+- `disputes/adp.py`: ADP API adapter, SSE response parsing and safe provider errors.
+- `disputes/prompts.py`: legacy single-agent prompts (used only by `adp` mode in tests/evaluate).
 - `data/cases.json`: 12 synthetic cases across both required categories.
 - `data/policy.json`: explicitly invented demonstration policies, version `demo-v1`.
 - `data/expected_results.json`: expected policy outcomes used only by evaluation/tests.
-- `evaluate.py`: offline or live comparison against the labelled synthetic scenarios.
-- `tests/`: policy checks, monetary bounds, context isolation and protocol parsing.
+- `evaluate.py`: offline or legacy live comparison against the labelled synthetic scenarios.
+- `tests/`: policy checks, monetary bounds, context isolation, SSE parsing and multi-agent validation.
 
 Each advocate selects tools in live mode. Python executes the selected read-only
 tools against the current trip. The judge receives both cases and the full retrieved
@@ -143,8 +143,9 @@ Run the standard-library tests; these need no provider key:
 .\.venv\Scripts\python.exe evaluate.py --mode offline
 ```
 
-On macOS/Linux use `python3 -m venv .venv`, then `.venv/bin/python` in place of the
-Windows executable path throughout this guide.
+The offline mode checks the deterministic demo baseline only; it is never
+exposed in the Streamlit UI. The app requires a published ADP multi-agent
+application and a valid AppKey in `.env`.
 
 Expected offline policy results: 12/12 labelled scenarios. This checks the
 deterministic demo baseline, **not AI accuracy, production accuracy or business ROI**.
@@ -209,3 +210,63 @@ Sources used for requirements: the user-supplied **AI CAN DO IT Tencent Cloud AI
 Singapore Hackathon 2026 Handbook.pdf**, **ADP_Hackathon_Guide_EN.pdf**, and official
 ADP API / Streamlit documentation. This archive does not include or redistribute
 the supplied handbook PDFs.
+
+## Deployment on Render
+
+The project deploys as two independent Python web services on Render.
+
+### Prerequisites
+
+- A published Tencent ADP multi-agent application and its AppKey.
+- A Render account with two web services created (or to be created).
+
+### Environment variables
+
+| Variable | Required by | Purpose |
+|---|---|---|
+| `ADP_APP_KEY` | **Streamlit** only | Published ADP application key. Set in Render dashboard → Environment. |
+| `ADP_ENDPOINT` | Streamlit (optional) | ADP SSE endpoint. Defaults to `https://wss.lke.tencentcloud.com/adp/v2/chat`. |
+| `ADP_TIMEOUT_SECONDS` | Streamlit (optional) | Request timeout, 5–120. Defaults to 45. |
+| `PORT` | Both (auto-set by Render) | Render sets this automatically. Do not set manually. |
+
+The Streamlit service reads `ADP_APP_KEY` from the server environment. A local `.env`
+file is optional for development only and is never required in production.
+
+### Build command (both services)
+
+```text
+pip install -r requirements.txt
+```
+
+### FastAPI evidence API
+
+- **Root directory:** `ryde_dispute_starter` (where `api.py` lives)
+- **Start command:**
+  ```text
+  uvicorn api:app --host 0.0.0.0 --port $PORT
+  ```
+- **Health check:** `GET /health` returns `{"status":"ok"}` with no credentials.
+- No environment variables required beyond `PORT`.
+
+### Streamlit app
+
+- **Root directory:** `ryde_dispute_starter` (where `app.py` lives)
+- **Start command:**
+  ```text
+  streamlit run app.py --server.address 0.0.0.0 --server.port $PORT --server.headless true
+  ```
+- Set `ADP_APP_KEY` in the Render dashboard Environment tab.
+
+### Data file paths
+
+All data files (`data/cases.json`, `data/policy.json`) load via `Path(__file__).resolve()`
+relative to the Python source, not the working directory. This means the services work
+correctly regardless of the working directory Render uses at startup.
+
+### Security notes
+
+- `.gitignore` excludes `.env`, `*.env`, and `runtime/` from Git.
+- No API keys appear in UI, logs, or saved case results.
+- The FastAPI `/health` endpoint exposes no credentials or sensitive details.
+- The SQLite case log writes to `runtime/` which is ephemeral on Render and
+  excluded from Git.
