@@ -353,6 +353,56 @@ with st.sidebar:
             st.session_state["status_by_case"][selected] = "ready"
         st.rerun()
 
+    # ── Selected-case summary ──────────────────────────────────────────
+    _sc = case_map[selected_id]
+    _pay = _sc.get("payment", {})
+    _trip = _sc.get("trip", {})
+    _is_org = _sc.get("policy_version") == "organiser-v2.1"
+
+    # Determine monetary values honestly.
+    _charged = _pay.get("charged_cents")
+    _cancel_fee = _pay.get("cancellation_fee_cents")
+    _ref_fare = _pay.get("reference_fare_cents")
+
+    if _cancel_fee and _cancel_fee > 0:
+        _fare_label = "Cancellation fee"
+        _fare_val = money(_cancel_fee)
+    elif _charged is not None:
+        _fare_label = "Charged fare"
+        _fare_val = money(_charged)
+    else:
+        _fare_label = "Charged fare"
+        _fare_val = "Unknown"
+
+    if _ref_fare is not None and _ref_fare > 0:
+        _ref_val = money(_ref_fare)
+    else:
+        _ref_val = "Not supplied"
+
+    # Short description: use an existing description field if available,
+    # otherwise a truncated excerpt of the complaint (no AI call).
+    _desc = _sc.get("description") or _sc.get("source") or ""
+    if not _desc:
+        _raw_complaint = _sc.get("complaint", "")
+        _desc = (_raw_complaint[:120] + "…") if len(_raw_complaint) > 120 else _raw_complaint
+
+    _source_label = "Organiser-provided" if _is_org else "Synthetic demo"
+
+    st.markdown("---")
+    st.caption(f"Selected case · {_sc['trip_id']}")
+    st.markdown(f"**{_sc['title']}**")
+    st.caption(_format_category(_sc["category"]))
+    st.caption(_desc)
+    st.markdown("")
+    _s1, _s2 = st.columns(2)
+    with _s1:
+        st.caption(_fare_label)
+        st.markdown(f"**{_fare_val}**")
+    with _s2:
+        st.caption("Reference fare")
+        st.markdown(f"**{_ref_val}**")
+    st.caption(f"Dataset: {_source_label}")
+
 
 # ── Top bar ─────────────────────────────────────────────────────────────
 result = st.session_state.get("result")
@@ -725,46 +775,25 @@ if result and result.get("trip_id") == selected_id:
         </div>
         """, unsafe_allow_html=True)
 
-        # Investigation activity timeline
+        # Investigation activity (collapsible, collapsed by default)
         st.markdown("<div style='margin-top:1.5rem;'></div>", unsafe_allow_html=True)
-        st.markdown("""
-        <div class="card">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
-                <div style="display:flex;align-items:center;gap:0.5rem;">
-                    <span style="font-size:1rem;">📡</span>
-                    <span class="card-title" style="margin:0;">Investigation activity</span>
-                    <span class="badge badge-grey">ADP</span>
-                </div>
-                <span class="muted small">SSE event stream</span>
-            </div>
-        """, unsafe_allow_html=True)
-
-        if adp_activity:
-            timeline_items = []
-            for i, a in enumerate(adp_activity):
-                detail = a.get("detail", {})
-                agent = detail.get("agent", "")
-                typ = detail.get("type", "")
-                event_label = a.get("event", "").replace("_", " ").title()
-                title = f"{agent} {event_label}".strip() if agent else event_label
-                sub = f"Event type: {typ}" if typ else f"Sequence {a.get('sequence', i+1)}"
-                active = a.get("event") in {"response_received", "final_recommendation"}
-                timeline_items.append(f"""
-                <div class="timeline-item {'active' if active else ''}">
-                    <div class="timeline-title">{title}</div>
-                    <div class="timeline-detail">{sub}</div>
-                </div>
-                """)
-            st.markdown(f'<div class="timeline">{ "".join(timeline_items) }</div>', unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="muted">No activity metadata returned for this investigation.</div>', unsafe_allow_html=True)
-
-        st.markdown("""
-            <div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid #e2e8f0;color:#64748b;font-size:0.75rem;line-height:1.4;">
-                Readable labels for ADP stream events shown in the prototype. No internal reasoning inferred.
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        with st.expander("Investigation activity", expanded=False):
+            if adp_activity:
+                for i, a in enumerate(adp_activity):
+                    detail = a.get("detail", {})
+                    agent = detail.get("agent", "")
+                    typ = detail.get("type", "")
+                    event_label = a.get("event", "").replace("_", " ").title()
+                    title = f"{agent} {event_label}".strip() if agent else event_label
+                    seq = a.get("sequence", i + 1)
+                    parts = [f"**{title}**"]
+                    if typ:
+                        parts.append(f" · {typ}")
+                    parts.append(f"  \nSequence {seq}")
+                    st.markdown("".join(parts))
+            else:
+                st.caption("No activity metadata returned for this investigation.")
+            st.caption("Readable labels for ADP stream events. No internal reasoning inferred.")
 
     # ── Tab 2: Evidence and policy ──────────────────────────────────────
     with tab_evidence:
