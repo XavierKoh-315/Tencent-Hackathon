@@ -187,8 +187,10 @@ class SecretExclusionTests(unittest.TestCase):
                                      f"Judge key 'data.{key}' in {endpoint} for {case_id}")
             flat = json.dumps(body, ensure_ascii=False)
             self.assertNotIn("expected_results", flat)
-            self.assertNotIn("rider_message", flat)
-            self.assertNotIn("driver_message", flat)
+            # Check for exact JSON keys (quoted) to avoid false positives on
+            # legitimate field names like "pre_cancel_driver_message_count".
+            self.assertNotIn('"rider_message"', flat)
+            self.assertNotIn('"driver_message"', flat)
             self.assertNotIn('"ruling"', flat)
             self.assertNotIn('"confidence"', flat)
             self.assertNotIn('"rationale"', flat)

@@ -15,6 +15,12 @@ from pydantic import BaseModel, field_validator
 
 from disputes.core import calculate_metrics, load_cases, load_policy
 
+try:
+    import organiser_support as org
+    _ORGANISER_IDS = frozenset(org.CASE_IDS)
+except Exception:
+    _ORGANISER_IDS = frozenset()
+
 app = FastAPI(
     title="Ryde Dispute Evidence API",
     description="Read-only synthetic evidence and demo-policy API. Not production data.",
@@ -48,6 +54,21 @@ def _resolve_case(case_id: str) -> dict:
     return copy.deepcopy(case)
 
 
+def _is_organiser(case_id: str) -> bool:
+    return case_id in _ORGANISER_IDS
+
+
+def _organiser_response(req: CaseRequest, tool: str) -> dict:
+    """Route to organiser_support and adapt the response to the API contract."""
+    ev = org.get_evidence(req.case_id, tool)
+    return {
+        "case_id": ev["case_id"],
+        "evidence_id": ev["evidence_ids"][0],
+        "synthetic": True,
+        "data": ev["data"],
+    }
+
+
 def _base_response(case_id: str, tool: str, data: dict) -> dict:
     """Build a standardised response: case_id, evidence_id, synthetic flag, and data.
 
@@ -71,24 +92,32 @@ def health() -> dict:
 
 @app.post("/tools/get_trip")
 def get_trip(req: CaseRequest) -> dict:
+    if _is_organiser(req.case_id):
+        return _organiser_response(req, "get_trip")
     case = _resolve_case(req.case_id)
     return _base_response(req.case_id, "get_trip", {"trip": case["trip"]})
 
 
 @app.post("/tools/get_messages")
 def get_messages(req: CaseRequest) -> dict:
+    if _is_organiser(req.case_id):
+        return _organiser_response(req, "get_messages")
     case = _resolve_case(req.case_id)
     return _base_response(req.case_id, "get_messages", {"messages": case["messages"]})
 
 
 @app.post("/tools/get_payment")
 def get_payment(req: CaseRequest) -> dict:
+    if _is_organiser(req.case_id):
+        return _organiser_response(req, "get_payment")
     case = _resolve_case(req.case_id)
     return _base_response(req.case_id, "get_payment", {"payment": case["payment"]})
 
 
 @app.post("/tools/get_policy")
 def get_policy(req: CaseRequest) -> dict:
+    if _is_organiser(req.case_id):
+        return _organiser_response(req, "get_policy")
     case = _resolve_case(req.case_id)
     policy = load_policy()
     clause_key = "DEMO-ROUTE-01" if case["category"] == "route_deviation" else "DEMO-NOSHOW-01"
@@ -104,7 +133,17 @@ def get_policy(req: CaseRequest) -> dict:
 
 @app.post("/tools/get_metrics")
 def get_metrics(req: CaseRequest) -> dict:
+    if _is_organiser(req.case_id):
+        return _organiser_response(req, "get_metrics")
     case = _resolve_case(req.case_id)
     policy = load_policy()
     metrics = calculate_metrics(case, policy)
     return _base_response(req.case_id, "get_metrics", {"metrics": metrics})
+
+
+@app.post("/tools/get_history")
+def get_history(req: CaseRequest) -> dict:
+    if _is_organiser(req.case_id):
+        return _organiser_response(req, "get_history")
+    case = _resolve_case(req.case_id)
+    return _base_response(req.case_id, "get_history", {"history": case.get("history", {})})

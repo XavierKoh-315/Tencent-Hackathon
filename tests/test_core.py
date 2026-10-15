@@ -65,8 +65,9 @@ class CoreTests(unittest.TestCase):
 
     def test_declared_policy_outcomes(self):
         expected = json.loads((ROOT / "data/expected_results.json").read_text())
-        for key, case in self.cases.items():
+        for key in expected:
             with self.subTest(trip=key):
+                case = self.cases[key]
                 verdict = resolve(case, mode="offline")["ruling"]
                 self.assertEqual({k: verdict[k] for k in expected[key]}, expected[key])
 

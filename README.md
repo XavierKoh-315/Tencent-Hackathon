@@ -270,3 +270,98 @@ correctly regardless of the working directory Render uses at startup.
 - The FastAPI `/health` endpoint exposes no credentials or sensitive details.
 - The SQLite case log writes to `runtime/` which is ephemeral on Render and
   excluded from Git.
+
+## Organiser update kit integration
+
+Three organiser-provided fixtures (DISP-001, DISP-002, DISP-003) are integrated
+alongside the original 12 synthetic regression cases. The organiser cases use
+**organiser policy v2.1**, which is loaded from `organiser_data/policy_v2_1.md`
+and kept strictly separate from the synthetic demo policy.
+
+### Case catalogue
+
+| Case | Category | Policy | Baseline ruling | Notes |
+|---|---|---|---|---|
+| NS01–NS06 | no_show | demo-v1 | varies | Original regression suite |
+| RT01–RT06 | route_deviation | demo-v1 | varies | Original regression suite |
+| DISP-001 | route_deviation | organiser-v2.1 | human_review | 4.3 km excess > 2 km threshold |
+| DISP-002 | no_show_charge | organiser-v2.1 | human_review | Fraud flag raises confidence threshold to 0.95 |
+| DISP-003 | fare_dispute | organiser-v2.1 | refund S$4.50 | Surge diff, rider not notified |
+
+### Policy isolation
+
+- Organiser cases route through `organiser_support.get_evidence()` for all six tools.
+- The `get_policy` endpoint returns organiser v2.1 clauses (prefixed `ORG-V2.1-*`)
+  for DISP cases, and demo clauses (`DEMO-*`) for original cases.
+- The validator accepts `ORG-V2.1-*` clause IDs for organiser cases and rejects
+  `DEMO-*` IDs, and vice versa.
+
+### DISP-001 policy conflict
+
+DISP-001 has a 4.3 km route deviation exceeding the 2 km autonomous-resolution
+threshold (policy 6.2). The excess-distance fare of S$3.44 is a candidate remedy
+for the human reviewer — it is **not** automatically awarded. The baseline
+escalates to `human_review` without hardcoding any sample answer.
+
+### ADP tool output mapping
+
+The ADP agents call six evidence tools. Each returns an `evidence_id` in the
+format `{case_id}:{tool}`. The tool-to-data mapping for organiser cases:
+
+| Tool | evidence_id | data key | Source |
+|---|---|---|---|
+| get_trip | `DISP-001:get_trip` | `trip` | `organiser_support.get_evidence()` |
+| get_messages | `DISP-001:get_messages` | `messages` | `organiser_support.get_evidence()` |
+| get_payment | `DISP-001:get_payment` | `payment` | `organiser_support.get_evidence()` |
+| get_metrics | `DISP-001:get_metrics` | `metrics` | `organiser_support.calculate_metrics()` |
+| get_policy | `DISP-001:get_policy` | `policy` | `organiser_data/policy_v2_1.md` |
+| get_history | `DISP-001:get_history` | `history` | `organiser_support.get_evidence()` |
+
+### ADP prompt addendum
+
+Append the following to the Judge agent prompt so it returns the correct JSON
+schema and cites organiser policy clauses for DISP cases:
+
+```text
+OUTPUT FORMAT — MANDATORY:
+Return a single valid JSON object only. No prose, no markdown, no code fences.
+The JSON must contain exactly these fields:
+
+{
+  "ruling": "refund" | "no_action" | "human_review",
+  "refund_cents": <integer>,
+  "confidence": <number 0.0–1.0>,
+  "rationale": "<string>",
+  "evidence_ids": ["<string>", ...],
+  "policy_ids": ["<string>", ...],
+  "rider_message": "<string>",
+  "driver_message": "<string>"
+}
+
+Rules:
+- ruling must be one of: "refund", "no_action", "human_review".
+- refund_cents must be an integer. Use 0 for "no_action" or "human_review".
+- confidence must be a finite number from 0 through 1.
+- evidence_ids must cite IDs returned by the evidence tools (format: CASE_ID:tool).
+- policy_ids must cite clause IDs from the get_policy response.
+  For organiser cases these are prefixed "ORG-V2.1-" (e.g. "ORG-V2.1-6.2").
+  For synthetic cases these are prefixed "DEMO-" (e.g. "DEMO-NOSHOW-01").
+  Do not mix policy versions.
+- All text must be in English.
+- Output nothing except the JSON object.
+```
+
+### Test suite
+
+```text
+tests/test_core.py              — Original regression + validation tests
+tests/test_adp.py               — SSE parser + ADP client tests
+tests/test_api.py               — FastAPI endpoint + secret-exclusion tests
+tests/test_organiser_support.py — Kit standalone tests (7 tests)
+tests/test_organiser_integration.py — Full integration tests (28 tests)
+```
+
+Run all tests:
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py" -v
+```

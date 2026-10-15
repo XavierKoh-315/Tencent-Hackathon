@@ -26,7 +26,8 @@ Return exactly these fields:
 {{"position": "refund|no_action|human_review", "statement": "concise case argument",
 "evidence_ids": ["valid evidence IDs"], "policy_ids": ["valid policy clause IDs"]}}.
 All citations must exist in the supplied evidence. If the complaint concerns safety
-or falls outside the two supported dispute categories, recommend human_review.
+or falls outside the four supported dispute categories
+(route_deviation, no_show, no_show_charge, fare_dispute), recommend human_review.
 """
 
 JUDGE = COMMON + """

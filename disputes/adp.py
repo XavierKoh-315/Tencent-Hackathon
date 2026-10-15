@@ -461,9 +461,12 @@ class ADPClient:
             "complaint": complaint,
             "output_language": "English",
             "output_instruction": (
-                "All agent responses and the final Judge ruling MUST be in English. "
-                "The final reply MUST be a single valid JSON object only — no prose, "
-                "no markdown, no code fences, no commentary before or after the JSON."
+                "Write generated reports and explanations in English. "
+                "Intermediate agents must perform their configured tool calls "
+                "and handoffs. Their report payloads must follow their saved "
+                "report schemas. Only the final user-facing Judge reply must be "
+                "exactly one JSON object matching the saved Judge schema, "
+                "without surrounding prose or Markdown."
             ),
         }
         if evidence_ids is not None:

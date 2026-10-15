@@ -271,7 +271,7 @@ class MultiAgentClientTests(unittest.TestCase):
         self.assertIn("complaint", payload)
         # Contents should include the English-output instruction
         self.assertEqual(payload["output_language"], "English")
-        self.assertIn("JSON", payload["output_instruction"])
+        self.assertIn("JSON object matching the saved Judge schema", payload["output_instruction"])
         # Contents should also include evidence_ids and policy_ids
         self.assertEqual(payload["evidence_ids"], ["NS01:get_trip"])
         self.assertEqual(payload["policy_ids"], ["DEMO-NOSHOW-01"])
