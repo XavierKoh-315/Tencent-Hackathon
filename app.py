@@ -319,121 +319,28 @@ def _format_category(cat: str) -> str:
     return cat.replace("_", " ").title()
 
 
-_synthetic_ids = {c["trip_id"] for c in cases if c.get("trip_id", "").startswith(("RT", "NS"))}
-
-
 # ── Sidebar ─────────────────────────────────────────────────────────────
 with st.sidebar:
-    # Brand
-    st.markdown("""
-    <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:1.5rem;">
-        <div style="width:34px;height:34px;border-radius:8px;background:#0d7a5e;display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:1.1rem;">f</div>
-        <div>
-            <div style="font-weight:700;color:#1a3c34;font-size:1.05rem;line-height:1;">fairway.</div>
-            <div style="font-size:0.65rem;color:#64748b;letter-spacing:0.04em;">EVERY TRIP. EVERY SIGNAL.</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("**Case Queue**")
 
-    # Workspace card
-    st.markdown("""
-    <div class="card" style="padding:0.75rem 1rem;margin-bottom:1.25rem;">
-        <div style="display:flex;align-items:center;gap:0.6rem;">
-            <div style="width:28px;height:28px;border-radius:6px;background:#e8f5f0;display:flex;align-items:center;justify-content:center;color:#0d7a5e;font-weight:600;font-size:0.8rem;">F</div>
-            <div>
-                <div style="font-weight:600;color:#1a3c34;font-size:0.85rem;">Trust & Safety</div>
-                <div style="font-size:0.72rem;color:#64748b;">Demo workspace</div>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Nav item
-    st.markdown("""
-    <div style="display:flex;align-items:center;gap:0.6rem;background:#e8f5f0;border:1px solid #c5e8dc;border-radius:10px;padding:0.65rem 0.9rem;margin-bottom:1.25rem;">
-        <span style="font-size:1rem;">⚖</span>
-        <span style="font-weight:600;color:#0d7a5e;font-size:0.88rem;">Dispute review</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Case queue tabs
-    queue_tab, sample_tab = st.tabs(["CASE QUEUE", "SAMPLE CASES"])
-
-    def _radio_label(key):
+    def _select_label(key: str) -> str:
         c = case_map[key]
-        return f"""<div class="queue-id">{c['trip_id']} · {_format_category(c['category'])}</div><div class="queue-title">{c['title']}</div>"""
+        return f"{c['trip_id']} — {c['title']}"
 
-    def _render_queue(options, tab_key):
-        current = st.session_state["selected_case"]
-        idx = options.index(current) if current in options else 0
-        choice = st.radio(
-            "Select case",
-            options=options,
-            format_func=_radio_label,
-            label_visibility="collapsed",
-            index=idx,
-            key=f"case_radio_{tab_key}",
-        )
-        if choice != current:
-            st.session_state["selected_case"] = choice
-            st.session_state.pop("result", None)
-            st.session_state.pop("adp_debug", None)
-            st.session_state.pop("validation_debug", None)
-            st.rerun()
+    selected = st.selectbox(
+        "Select a case",
+        options=[c["trip_id"] for c in cases],
+        format_func=_select_label,
+        index=[c["trip_id"] for c in cases].index(st.session_state["selected_case"]),
+        key="case_select",
+    )
 
-    with queue_tab:
-        _render_queue([c["trip_id"] for c in cases], "all")
-
-    with sample_tab:
-        synthetic_options = [c["trip_id"] for c in cases if c["trip_id"] in _synthetic_ids]
-        if synthetic_options:
-            _render_queue(synthetic_options, "synth")
-        else:
-            st.markdown('<div class="muted">No synthetic cases loaded.</div>', unsafe_allow_html=True)
-
-    st.markdown("<div style='margin:1.25rem 0 0.5rem;'></div>", unsafe_allow_html=True)
-
-    # Selected case financial details
-    st.markdown('<div class="eyebrow">Selected case</div>', unsafe_allow_html=True)
-    payment = case["payment"]
-    st.markdown(f"""
-    <div class="card" style="padding:0.9rem 1rem;margin-bottom:0.75rem;">
-        <div style="display:flex;justify-content:space-between;margin-bottom:0.35rem;">
-            <span class="muted">Charged fare</span>
-            <span style="font-weight:600;color:#1a3c34;">{money(payment["charged_cents"])}</span>
-        </div>
-        {"" + (f'<div style="display:flex;justify-content:space-between;margin-bottom:0.35rem;"><span class="muted">Reference fare</span><span style="font-weight:600;color:#1a3c34;">{money(payment["reference_fare_cents"])}</span></div>' if payment.get("reference_fare_cents") else "") + ""}
-        {"" + (f'<div style="display:flex;justify-content:space-between;"><span class="muted">Cancellation fee</span><span style="font-weight:600;color:#1a3c34;">{money(payment["cancellation_fee_cents"])}</span></div>' if payment.get("cancellation_fee_cents") else "") + ""}
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Source label
-    source = case.get("source", "Synthetic demonstration data")
-    policy_version = case.get("policy_version", "demo")
-    st.markdown(f"""
-    <div class="badge badge-grey" style="margin-bottom:0.75rem;white-space:normal;text-align:left;line-height:1.4;">
-        <span>🛈</span> {source} · Policy: {policy_version}
-    </div>
-    """, unsafe_allow_html=True)
-
-    # ADP status
-    st.markdown('<div class="eyebrow">Connection status</div>', unsafe_allow_html=True)
-    adp_config = settings(ROOT)
-    app_key = adp_config.get("ADP_APP_KEY", "").strip()
-    if app_key and app_key != "your_actual_published_appkey_here":
-        st.markdown("""
-        <div style="display:flex;align-items:center;gap:0.5rem;color:#0d7a5e;font-size:0.85rem;font-weight:600;">
-            <span style="width:8px;height:8px;border-radius:50%;background:#0d7a5e;"></span> ADP connected
-        </div>
-        <div style="font-size:0.72rem;color:#64748b;margin-top:0.2rem;">AppKey configured · Secure workspace</div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown("""
-        <div style="display:flex;align-items:center;gap:0.5rem;color:#b45309;font-size:0.85rem;font-weight:600;">
-            <span style="width:8px;height:8px;border-radius:50%;background:#b45309;"></span> ADP not configured
-        </div>
-        <div style="font-size:0.72rem;color:#64748b;margin-top:0.2rem;">Set ADP_APP_KEY in the server environment or local <code>.env</code>.</div>
-        """, unsafe_allow_html=True)
+    if selected != st.session_state["selected_case"]:
+        st.session_state["selected_case"] = selected
+        st.session_state.pop("result", None)
+        st.session_state.pop("adp_debug", None)
+        st.session_state.pop("validation_debug", None)
+        st.rerun()
 
 
 # ── Top bar ─────────────────────────────────────────────────────────────
