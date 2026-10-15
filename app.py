@@ -59,9 +59,9 @@ def _css():
         background: {MINT_BG};
     }}
 
-    /* Hide default Streamlit header/title in main */
+    /* Hide only the Streamlit main-menu (hamburger); keep the header and
+       its native sidebar collapse/expand toggle visible and clickable. */
     #MainMenu {{visibility: hidden;}}
-    header {{visibility: hidden;}}
 
     /* Buttons */
     .stButton > button {{
@@ -194,6 +194,11 @@ def _css():
         color: #4b5563;
         border: 1px solid #e5e7eb;
     }}
+    .badge-red {{
+        background: #fef2f2;
+        color: #b91c1c;
+        border: 1px solid #fecaca;
+    }}
 
     /* Resolution card metric columns */
     .metric-label {{ color: {MUTED}; font-size: 0.75rem; font-weight: 500; margin-bottom: 0.25rem; }}
@@ -310,6 +315,9 @@ if "selected_case" not in st.session_state:
     st.session_state["selected_case"] = cases[0]["trip_id"]
 if "executing" not in st.session_state:
     st.session_state["executing"] = False
+# Per-case investigation status: ready | investigating | completed | failed.
+if "status_by_case" not in st.session_state:
+    st.session_state["status_by_case"] = {}
 
 selected_id = st.session_state["selected_case"]
 case = copy.deepcopy(case_map[selected_id])
@@ -340,16 +348,34 @@ with st.sidebar:
         st.session_state.pop("result", None)
         st.session_state.pop("adp_debug", None)
         st.session_state.pop("validation_debug", None)
+        # New case shows "Ready" unless it already has a completed result.
+        if st.session_state["status_by_case"].get(selected) == "investigating":
+            st.session_state["status_by_case"][selected] = "ready"
         st.rerun()
 
 
 # ── Top bar ─────────────────────────────────────────────────────────────
 result = st.session_state.get("result")
-status_badge = ""
-if result and result.get("trip_id") == selected_id:
-    status_badge = '<span class="badge badge-green"><span>✓</span> Investigation complete</span>'
+_status_map = st.session_state.get("status_by_case", {})
+# Derive the effective status: completed only when the stored result is
+# valid and belongs to the selected case; failed when validation or the
+# request errored; investigating during the request; otherwise ready.
+if st.session_state.get("executing"):
+    effective_status = "investigating"
+elif _status_map.get(selected_id) == "failed":
+    effective_status = "failed"
+elif result and result.get("trip_id") == selected_id:
+    effective_status = "completed"
 else:
-    status_badge = '<span class="badge badge-grey">Ready to investigate</span>'
+    effective_status = "ready"
+
+_badge = {
+    "ready": '<span class="badge badge-grey">Ready to investigate</span>',
+    "investigating": '<span class="badge badge-amber">Investigating…</span>',
+    "completed": '<span class="badge badge-green"><span>✓</span> Investigation completed</span>',
+    "failed": '<span class="badge badge-red">Investigation failed</span>',
+}
+status_badge = _badge[effective_status]
 
 st.markdown(f"""
 <div class="top-bar">
@@ -357,10 +383,6 @@ st.markdown(f"""
         <span>Disputes</span>
         <span style="color:#cbd5e1;">/</span>
         <span style="font-weight:600;color:#1a3c34;">Case {selected_id}</span>
-    </div>
-    <div style="display:flex;align-items:center;gap:0.75rem;">
-        <span class="badge badge-grey">DEMO ENVIRONMENT</span>
-        <div style="width:28px;height:28px;border-radius:50%;background:#e8f5f0;display:flex;align-items:center;justify-content:center;color:#0d7a5e;font-weight:600;font-size:0.75rem;border:1px solid #c5e8dc;">JD</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -420,9 +442,12 @@ if submitted and not st.session_state["executing"]:
     st.session_state.pop("result", None)
     st.session_state.pop("adp_debug", None)
     st.session_state.pop("validation_debug", None)
+    # Mark investigating for this case so the badge shows yellow during the
+    # request, before the response returns.
+    st.session_state["status_by_case"][selected_id] = "investigating"
     case["complaint"] = complaint.strip()
     if not case["complaint"]:
-        st.error("Enter a complaint to investigate.")
+        st.session_state["status_by_case"][selected_id] = "ready"
     else:
         try:
             client = ADPClient(settings(ROOT))
@@ -442,6 +467,7 @@ if submitted and not st.session_state["executing"]:
                 if result.get("adp_debug"):
                     st.session_state["adp_debug"] = result["adp_debug"]
                 status.update(label="Investigation complete", state="complete", expanded=False)
+            st.session_state["status_by_case"][selected_id] = "completed"
         except ADPError as exc:
             msg = str(exc)
             debug_from_exc = getattr(exc, "debug_info", None)
@@ -468,15 +494,18 @@ if submitted and not st.session_state["executing"]:
             else:
                 st.error("ADP error: " + msg)
                 st.caption("No recommendation was accepted. Check the setup or retry after fixing the reported issue.")
+            st.session_state["status_by_case"][selected_id] = "failed"
         except OutputError as exc:
             st.error("Schema validation failed: " + str(exc))
             st.caption("ADP returned a response but it did not pass the project's result validator. No fabricated fields were accepted.")
             val_debug = getattr(exc, "validation_debug", None)
             if val_debug:
                 st.session_state["validation_debug"] = val_debug
+            st.session_state["status_by_case"][selected_id] = "failed"
         except (ValueError, OSError) as exc:
             st.error("Unexpected error: " + str(exc))
             st.caption("No recommendation was accepted.")
+            st.session_state["status_by_case"][selected_id] = "failed"
     st.session_state["executing"] = False
 
 
