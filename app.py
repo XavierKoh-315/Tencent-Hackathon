@@ -53,7 +53,19 @@ def _css():
     /* Page background */
     .stApp {{
         background: {MINT_BG};
+        color: {TEXT};
+        color-scheme: light;
     }}
+
+    /* Keep Streamlit's native text readable when a saved browser preference
+       or hosting environment previously selected the dark theme. */
+    .stApp [data-testid="stMarkdownContainer"],
+    .stApp [data-testid="stWidgetLabel"],
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"],
+    [data-testid="stSidebar"] [data-testid="stWidgetLabel"] {{
+        color: {TEXT};
+    }}
+    .stApp .page-title {{ color: {DARK_GREEN} !important; }}
 
     /* Main content width and padding */
     .block-container {{
@@ -64,6 +76,7 @@ def _css():
     /* Sidebar: pale mint background */
     [data-testid="stSidebar"] {{
         background: #eaf5ef !important;
+        color: {TEXT};
     }}
     [data-testid="stSidebar"] > div:first-child {{
         background: #eaf5ef;
@@ -79,14 +92,24 @@ def _css():
         font-weight: 500;
         transition: all 0.15s ease;
     }}
-    [data-testid="stBaseButton-primary"] {{
-        background: {PRIMARY_GREEN};
-        border: 1px solid {PRIMARY_GREEN};
-        color: white;
+    [data-testid="stBaseButton-primary"],
+    [data-testid="stBaseButton-primaryFormSubmit"],
+    button[kind="primary"] {{
+        background: {PRIMARY_GREEN} !important;
+        border: 1px solid {PRIMARY_GREEN} !important;
+        color: white !important;
     }}
-    [data-testid="stBaseButton-primary"]:hover {{
-        background: #0a6b52;
-        border-color: #0a6b52;
+    [data-testid="stBaseButton-primary"]:hover,
+    [data-testid="stBaseButton-primaryFormSubmit"]:hover,
+    button[kind="primary"]:hover {{
+        background: #0a6b52 !important;
+        border-color: #0a6b52 !important;
+        color: white !important;
+    }}
+    [data-testid="stBaseButton-primary"] *,
+    [data-testid="stBaseButton-primaryFormSubmit"] *,
+    button[kind="primary"] * {{
+        color: white !important;
     }}
     .stButton > button[kind="secondary"]:hover {{
         border-color: {PRIMARY_GREEN};
@@ -95,15 +118,31 @@ def _css():
 
     /* Form inputs */
     .stTextArea textarea {{
-        background: {WHITE};
+        background: {WHITE} !important;
         border: 1px solid {BORDER};
         border-radius: 10px;
+        color: {TEXT} !important;
+        caret-color: {TEXT};
         font-size: 0.95rem;
         line-height: 1.5;
     }}
+    .stTextArea textarea::placeholder {{ color: {MUTED} !important; opacity: 0.8; }}
     .stTextArea textarea:focus {{
         border-color: {PRIMARY_GREEN};
         box-shadow: 0 0 0 3px rgba(13, 122, 94, 0.08);
+    }}
+
+    /* Select boxes are BaseWeb controls and otherwise retain dark-theme
+       colours independently of the page background. */
+    [data-baseweb="select"] > div {{
+        background: {WHITE} !important;
+        border-color: {BORDER} !important;
+        color: {TEXT} !important;
+    }}
+    [data-baseweb="select"] span,
+    [data-baseweb="select"] svg {{
+        color: {TEXT} !important;
+        fill: currentColor;
     }}
 
     /* Tabs */
