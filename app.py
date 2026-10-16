@@ -382,7 +382,7 @@ def _css():
 
 
 # ── Page config ─────────────────────────────────────────────────────────
-st.set_page_config(page_title="Ride Dispute Review", page_icon="⚖", layout="wide")
+st.set_page_config(page_title="RydeResolve", page_icon="⚖", layout="wide")
 _css()
 
 # ── Data load ───────────────────────────────────────────────────────────
@@ -1042,7 +1042,7 @@ _html(f"""
 head_col1, head_col2 = st.columns([3, 2])
 with head_col1:
     _html('<div class="eyebrow">Evidence-led resolution</div>')
-    _html('<h1 class="page-title">Ride Dispute Review</h1>')
+    _html('<h1 class="page-title">RydeResolve</h1>')
     _html('<div class="page-subtitle">Three specialised AI agents. Every perspective considered.</div>')
 # Updateable placeholder so the badge can switch to "Investigating…" before
 # the blocking network request begins, without a full page rerun.
