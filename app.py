@@ -310,16 +310,26 @@ _css()
 cases = load_cases()
 case_map = {c["trip_id"]: c for c in cases}
 
+# User-facing dropdown allowlist, in the requested display order.
+DROPDOWN_CASE_IDS = ["NS01", "NS02", "NS03", "RT01", "RT02",
+                     "DISP-003", "NS04", "DISP-001"]
+
 # Session-state initialisation.
 if "selected_case" not in st.session_state:
-    st.session_state["selected_case"] = cases[0]["trip_id"]
+    st.session_state["selected_case"] = DROPDOWN_CASE_IDS[0]
 if "executing" not in st.session_state:
     st.session_state["executing"] = False
 # Per-case investigation status: ready | investigating | completed | failed.
 if "status_by_case" not in st.session_state:
     st.session_state["status_by_case"] = {}
 
+# Safely handle a previously selected case that is now hidden from the
+# dropdown (e.g. NS05 chosen in an earlier session). Fall back to the
+# first case in the allowlist.
 selected_id = st.session_state["selected_case"]
+if selected_id not in DROPDOWN_CASE_IDS:
+    selected_id = DROPDOWN_CASE_IDS[0]
+    st.session_state["selected_case"] = selected_id
 case = copy.deepcopy(case_map[selected_id])
 
 
@@ -337,9 +347,9 @@ with st.sidebar:
 
     selected = st.selectbox(
         "Select a case",
-        options=[c["trip_id"] for c in cases],
+        options=DROPDOWN_CASE_IDS,
         format_func=_select_label,
-        index=[c["trip_id"] for c in cases].index(st.session_state["selected_case"]),
+        index=DROPDOWN_CASE_IDS.index(selected_id),
         key="case_select",
     )
 
