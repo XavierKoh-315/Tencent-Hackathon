@@ -1,29 +1,39 @@
-# Starter validation — 8 October 2026
+# Validation of this patch
 
-The following checks were completed before packaging:
+Prepared from the uploaded GPT(1).zip. This is local verification, not certification of published ADP agents or organiser scoring.
 
-- 14 standard-library unit tests passed, including all 12 labelled synthetic
-  policy scenarios, refund caps, context isolation, invalid evidence references,
-  invalid model amounts, low confidence and SQLite persistence.
-- ADP protocol handling was checked with simulated responses: multi-line SSE,
-  text replacement, final reply handling, excluding thought messages, failed or
-  incomplete streams, JSON errors and missing credentials.
-- Streamlit AppTest ran the actual interface in Python 3.12 / Streamlit 1.65.0:
-  NS01 produced S$5.00 refund, NS02 retained the charge, RT01 produced S$3.69
-  refund, and NS04 required human review. Changing trips did not display a stale
-  ruling. Selecting ADP mode without a key showed a clear configuration error.
-- Offline evaluation matched the declared policy outcome on 12/12 scenarios.
-- RT01 monetary expectation was independently checked using spherical-law-of-
-  cosines distances against the application's haversine calculation.
+## Results
 
-**Not yet verified:** a live ADP provider session with the user's published app,
-model configuration and quota. Provider-contract tests are not live AI evaluation.
-The user still needs to perform genuine CodeBuddy development and capture evidence.
-All data and policy rules are explicitly synthetic/demo-only.
+- **143 automated tests passed** with Python 3.12 and Streamlit 1.66.0.
+- All eight displayed cases matched the local policy baselines below.
+- Streamlit started locally; both `/` and `/_stcore/health` returned HTTP 200.
+- Streamlit AppTest rendered all eight result screens without application exceptions.
+- Interaction checks covered immediate refund-field enablement, invalid amount retention, successful saving, immutable AI snapshots, confidence display, refresh recovery, case switching, storage failure, and a pending review followed by a final linked review.
+- Storage checks covered finite decimal amounts, zero/unknown charges, correct case/run/policy binding, concurrent duplicate prevention and idempotent retries. SQLite was exercised; no live PostgreSQL instance was available for integration testing.
+- ADP/parser/API regression tests passed using controlled fixtures. Missing citations are now rejected instead of being filled in by the backend. Original model JSON is preserved before a policy escalation.
+- Streamlit is pinned to the tested version. An older 1.45 test environment had a dialog/AppTest re-entry failure; it is not the supported dependency for this patch.
+- Pixel-by-pixel/browser screenshot comparison was not completed: local Chromium download failed, and the separate cloud browser could not reach the local server. UI behaviour was checked through Streamlit's testing runtime. Colour changes need a final visual check after deployment.
+- No paid ADP requests were made, no key was supplied, and no Render deployment or database connection was changed.
 
-Reproduce the core checks with:
+## Eight displayed cases
 
-```text
-python -m unittest discover -s tests -v
-python evaluate.py --mode offline
-```
+Amounts below are proposed refunds, not issued payments. Baseline confidence is a prototype heuristic; it is not a live model score.
+
+| Case | Type | Expected local outcome | Proposed refund | Reason |
+|---|---|---|---:|---|
+| NS01 | No-show charge | Refund | S$5.00 | Driver outside the agreed pickup radius |
+| NS02 | No-show charge | No action | S$0.00 | Correct pickup point and sufficient verified waiting time |
+| NS03 | No-show charge | Refund | S$5.00 | Driver cancelled before the required wait |
+| NS04 | No-show charge | Human review | S$0.00 pending | Missing GPS prevents pickup verification |
+| RT01 | Route deviation | Partial refund | S$3.69 | Supported excess fare from an unapproved detour |
+| RT02 | Route deviation | No action | S$0.00 | Supplied record establishes an agreed or justified detour |
+| DISP-001 | Route deviation | Human review | S$0.00 pending | 4.3 km deviation exceeds organiser policy 6.2's 2 km limit |
+| DISP-003 | Fare dispute | Partial refund | S$4.50 | Supported surge differential without rider notification |
+
+DISP-001's S$3.44 is a candidate remedy for a reviewer; it must not appear as an automated refund. Its organiser sample recommendation and the supplied escalation rule differ, so the policy-first baseline requires review.
+
+## Limits
+
+Real ADP outputs can differ from these baselines, and mismatches conservatively trigger human review. A matching local baseline does not prove the published Judge, advocates and remote tools are configured correctly. No actual ADP token count or latency was measured. The live verifier is explicitly opt-in; see UPDATE_GUIDE.md.
+
+Synthetic NS/RT policies and organiser-provided hackathon reference policies remain separate. This patch does not edit those policy files, prompts or datasets. Cases hidden from the dropdown remain in the original regression datasets.

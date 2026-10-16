@@ -1,0 +1,211 @@
+{
+  "mode": "local_policy_only",
+  "created_at": "2026-10-16T07:40:34.318281+00:00",
+  "note": "Local baseline checks do not establish published agent behaviour. Live tests use real tokens. Expected outcomes are never passed to ADP.",
+  "cases": [
+    {
+      "case_id": "NS01",
+      "category": "no_show",
+      "title": "Driver at the wrong pickup point",
+      "expected_ruling": "refund",
+      "expected_refund_cents": 500,
+      "validated_ruling": "refund",
+      "validated_refund_cents": 500,
+      "matches_expected": true,
+      "confidence": 0.92,
+      "confidence_note": "Uncalibrated model estimate in live mode; policy heuristic in local mode",
+      "elapsed_seconds": 0.000547,
+      "rationale": "The GPS record places the driver outside the agreed pickup radius; refund the cancellation fee.",
+      "evidence_ids": [
+        "NS01:get_history",
+        "NS01:get_messages",
+        "NS01:get_metrics",
+        "NS01:get_payment",
+        "NS01:get_policy",
+        "NS01:get_trip"
+      ],
+      "policy_ids": [
+        "DEMO-NOSHOW-01"
+      ]
+    },
+    {
+      "case_id": "NS02",
+      "category": "no_show",
+      "title": "Driver waited at the correct point",
+      "expected_ruling": "no_action",
+      "expected_refund_cents": 0,
+      "validated_ruling": "no_action",
+      "validated_refund_cents": 0,
+      "matches_expected": true,
+      "confidence": 0.92,
+      "confidence_note": "Uncalibrated model estimate in live mode; policy heuristic in local mode",
+      "elapsed_seconds": 0.000339,
+      "rationale": "GPS and timestamps support presence at the pickup point for the required verified waiting interval.",
+      "evidence_ids": [
+        "NS02:get_history",
+        "NS02:get_messages",
+        "NS02:get_metrics",
+        "NS02:get_payment",
+        "NS02:get_policy",
+        "NS02:get_trip"
+      ],
+      "policy_ids": [
+        "DEMO-NOSHOW-01"
+      ]
+    },
+    {
+      "case_id": "NS03",
+      "category": "no_show",
+      "title": "Driver cancelled too early",
+      "expected_ruling": "refund",
+      "expected_refund_cents": 500,
+      "validated_ruling": "refund",
+      "validated_refund_cents": 500,
+      "matches_expected": true,
+      "confidence": 0.92,
+      "confidence_note": "Uncalibrated model estimate in live mode; policy heuristic in local mode",
+      "elapsed_seconds": 0.000316,
+      "rationale": "The verified waiting interval is shorter than the demo policy minimum; refund the cancellation fee.",
+      "evidence_ids": [
+        "NS03:get_history",
+        "NS03:get_messages",
+        "NS03:get_metrics",
+        "NS03:get_payment",
+        "NS03:get_policy",
+        "NS03:get_trip"
+      ],
+      "policy_ids": [
+        "DEMO-NOSHOW-01"
+      ]
+    },
+    {
+      "case_id": "NS04",
+      "category": "no_show",
+      "title": "Pickup GPS is missing",
+      "expected_ruling": "human_review",
+      "expected_refund_cents": 0,
+      "validated_ruling": "human_review",
+      "validated_refund_cents": 0,
+      "matches_expected": true,
+      "confidence": 0.35,
+      "confidence_note": "Uncalibrated model estimate in live mode; policy heuristic in local mode",
+      "elapsed_seconds": 0.000201,
+      "rationale": "GPS evidence is missing; pickup presence cannot be verified.",
+      "evidence_ids": [
+        "NS04:get_history",
+        "NS04:get_messages",
+        "NS04:get_metrics",
+        "NS04:get_payment",
+        "NS04:get_policy",
+        "NS04:get_trip"
+      ],
+      "policy_ids": [
+        "DEMO-NOSHOW-01"
+      ]
+    },
+    {
+      "case_id": "RT01",
+      "category": "route_deviation",
+      "title": "Unapproved detour with excess fare",
+      "expected_ruling": "refund",
+      "expected_refund_cents": 369,
+      "validated_ruling": "refund",
+      "validated_refund_cents": 369,
+      "matches_expected": true,
+      "confidence": 0.92,
+      "confidence_note": "Uncalibrated model estimate in live mode; policy heuristic in local mode",
+      "elapsed_seconds": 0.000324,
+      "rationale": "An unapproved excess route meets the demo policy threshold; refund S$3.69 of the supported excess fare.",
+      "evidence_ids": [
+        "RT01:get_history",
+        "RT01:get_messages",
+        "RT01:get_metrics",
+        "RT01:get_payment",
+        "RT01:get_policy",
+        "RT01:get_trip"
+      ],
+      "policy_ids": [
+        "DEMO-ROUTE-01"
+      ]
+    },
+    {
+      "case_id": "RT02",
+      "category": "route_deviation",
+      "title": "Rider approved the detour",
+      "expected_ruling": "no_action",
+      "expected_refund_cents": 0,
+      "validated_ruling": "no_action",
+      "validated_refund_cents": 0,
+      "matches_expected": true,
+      "confidence": 0.92,
+      "confidence_note": "Uncalibrated model estimate in live mode; policy heuristic in local mode",
+      "elapsed_seconds": 0.000258,
+      "rationale": "The supplied record establishes an agreed or operationally justified detour.",
+      "evidence_ids": [
+        "RT02:get_history",
+        "RT02:get_messages",
+        "RT02:get_metrics",
+        "RT02:get_payment",
+        "RT02:get_policy",
+        "RT02:get_trip"
+      ],
+      "policy_ids": [
+        "DEMO-ROUTE-01"
+      ]
+    },
+    {
+      "case_id": "DISP-001",
+      "category": "route_deviation",
+      "title": "Route Deviation",
+      "expected_ruling": "human_review",
+      "expected_refund_cents": 0,
+      "validated_ruling": "human_review",
+      "validated_refund_cents": 0,
+      "matches_expected": true,
+      "confidence": 0.35,
+      "confidence_note": "Uncalibrated model estimate in live mode; policy heuristic in local mode",
+      "elapsed_seconds": 0.00498,
+      "rationale": "Route deviation of 4.3 km exceeds the 2 km autonomous-resolution threshold under policy 6.2. The S$3.44 excess-distance fare is a candidate remedy for the reviewer. Traffic conditions were supplied but driver notification is disputed; call recording not available.",
+      "evidence_ids": [
+        "DISP-001:get_history",
+        "DISP-001:get_messages",
+        "DISP-001:get_metrics",
+        "DISP-001:get_payment",
+        "DISP-001:get_policy",
+        "DISP-001:get_trip"
+      ],
+      "policy_ids": [
+        "ORG-V2.1-6.2",
+        "ORG-V2.1-1.2",
+        "ORG-V2.1-6.1"
+      ]
+    },
+    {
+      "case_id": "DISP-003",
+      "category": "fare_dispute",
+      "title": "Fare Dispute",
+      "expected_ruling": "refund",
+      "expected_refund_cents": 450,
+      "validated_ruling": "refund",
+      "validated_refund_cents": 450,
+      "matches_expected": true,
+      "confidence": 0.92,
+      "confidence_note": "Uncalibrated model estimate in live mode; policy heuristic in local mode",
+      "elapsed_seconds": 0.003711,
+      "rationale": "Surge multiplier increased between quote and trip start; rider was not notified. Refund S$4.50 surge differential under policy 3.3/3.4. Below $10 threshold, AI ruling is final.",
+      "evidence_ids": [
+        "DISP-003:get_history",
+        "DISP-003:get_messages",
+        "DISP-003:get_metrics",
+        "DISP-003:get_payment",
+        "DISP-003:get_policy",
+        "DISP-003:get_trip"
+      ],
+      "policy_ids": [
+        "ORG-V2.1-3.3",
+        "ORG-V2.1-3.4",
+        "ORG-V2.1-7.2"
+      ]
+    }
+  ]
+}

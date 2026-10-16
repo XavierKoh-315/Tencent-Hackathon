@@ -228,6 +228,7 @@ The project deploys as two independent Python web services on Render.
 | `ADP_ENDPOINT` | Streamlit (optional) | ADP SSE endpoint. Defaults to `https://wss.lke.tencentcloud.com/adp/v2/chat`. |
 | `ADP_TIMEOUT_SECONDS` | Streamlit (optional) | Request timeout, 5–120. Defaults to 45. |
 | `PORT` | Both (auto-set by Render) | Render sets this automatically. Do not set manually. |
+| `DATABASE_URL` | Streamlit on Render | PostgreSQL connection string for durable human-review storage. Required for saving or loading reviews on Render; local development uses SQLite if unset. |
 
 The Streamlit service reads `ADP_APP_KEY` from the server environment. A local `.env`
 file is optional for development only and is never required in production.
@@ -270,6 +271,46 @@ correctly regardless of the working directory Render uses at startup.
 - The FastAPI `/health` endpoint exposes no credentials or sensitive details.
 - The SQLite case log writes to `runtime/` which is ephemeral on Render and
   excluded from Git.
+
+### Human-review record storage
+
+Human-review records are stored separately from the AI result table and the
+original AI result is preserved unchanged inside each review record.
+
+| Variable | Required by | Purpose |
+|---|---|---|
+| `DATABASE_URL` | Streamlit on Render | PostgreSQL connection string for durable review storage. Local development uses `runtime/human_reviews.sqlite3` if unset. |
+
+**Render setup for durable storage:**
+
+1. Create a managed PostgreSQL database in the Render dashboard.
+2. Copy the internal connection string (e.g. `postgresql://user:pass@host:5432/db`).
+3. Set it as the `DATABASE_URL` environment variable on the Streamlit web service.
+4. `psycopg2-binary` is in `requirements.txt` and will be installed automatically.
+
+On Render, a missing/unavailable `DATABASE_URL` disables the review form and displays
+an explanatory warning while keeping the AI recommendation visible. It never reports
+a save as successful using temporary server storage. Locally, SQLite is used when
+`DATABASE_URL` is unset. PostgreSQL must be reachable from the Streamlit service;
+use an internal URL only when the database and service share the appropriate private network.
+
+The decision selector updates outside the form, enabling the refund amount immediately.
+Refund limits come from the saved payment evidence; unknown amounts are never zero.
+Only a valid `human_review` result can be reviewed. A completed review becomes green,
+with confidence shown as an em dash; further review stays amber and can be continued.
+No payments or messages are executed.
+
+Each record stores the untouched original AI result, case/run identifiers, policy,
+reviewer-entered name, messages, explanation and UTC timestamp. Concurrent duplicate
+submissions are serialized. Continuing a pending review appends a linked record;
+previous records are never overwritten. The URL after saving includes the review's
+random identifier so a refresh restores the same investigation without another ADP call.
+These are demo records: the typed name and link are not an authentication system.
+
+See `UPDATE_GUIDE.md` for replacement instructions and `VALIDATION.md` for local results.
+`python verify_cases.py` checks all eight local baselines without ADP calls.
+`python verify_cases.py --live --cases NS02` explicitly performs one paid ADP test
+using your local `.env`; never upload the key or commit it.
 
 ## Organiser update kit integration
 

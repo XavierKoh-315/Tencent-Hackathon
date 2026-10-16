@@ -29,7 +29,7 @@ class ScriptedMultiAgentClient:
     """Minimal scripted client for organiser multi-agent tests."""
     def __init__(self, outcome=None):
         self.review_calls = []
-        self.outcome = outcome or {"ruling": "refund", "refund_cents": 0, "confidence": 0.9}
+        self.outcome = outcome or {"ruling": "human_review", "refund_cents": 0, "confidence": 0.9}
 
     def review(self, case_id, complaint, conversation_id, evidence_ids=None, policy_ids=None):
         self.review_calls.append({"case_id": case_id, "complaint": complaint,

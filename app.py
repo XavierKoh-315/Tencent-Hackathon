@@ -9,6 +9,10 @@ Judge's final ruling against the demo policy and evidence IDs.
 """
 import copy
 import json
+import math
+import uuid
+import inspect
+import html
 from pathlib import Path
 
 import streamlit as st
@@ -18,21 +22,27 @@ from disputes.core import (
     OutputError, build_evidence_timeline, load_cases, load_policy,
     money, resolve, save_result,
 )
+from human_review_store import (save_review, get_review_for_run, get_review_by_id,
+                                charged_cents_for, model_confidence_for, _to_cents)
 
 ROOT = Path(__file__).resolve().parent
 
 PRIMARY_GREEN = "#0d7a5e"
 DARK_GREEN = "#1a3c34"
-MINT_BG = "#f0f9f6"
+MINT_BG = "#f7faf8"
 MINT_CARD = "#e8f5f0"
 WHITE = "#ffffff"
-BORDER = "#e2e8f0"
+BORDER = "#dce8e2"
 MUTED = "#64748b"
 TEXT = "#1f2937"
 
 
+def _html(markup: str):
+    st.markdown("\n".join(line.lstrip() for line in markup.splitlines()), unsafe_allow_html=True)
+
+
 def _css():
-    st.markdown(f"""
+    _html(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
@@ -53,10 +63,10 @@ def _css():
 
     /* Sidebar: pale mint background */
     [data-testid="stSidebar"] {{
-        background: {MINT_BG} !important;
+        background: #eaf5ef !important;
     }}
     [data-testid="stSidebar"] > div:first-child {{
-        background: {MINT_BG};
+        background: #eaf5ef;
     }}
 
     /* Hide only the Streamlit main-menu (hamburger); keep the header and
@@ -69,12 +79,12 @@ def _css():
         font-weight: 500;
         transition: all 0.15s ease;
     }}
-    .stButton > button[kind="primary"] {{
+    [data-testid="stBaseButton-primary"] {{
         background: {PRIMARY_GREEN};
         border: 1px solid {PRIMARY_GREEN};
         color: white;
     }}
-    .stButton > button[kind="primary"]:hover {{
+    [data-testid="stBaseButton-primary"]:hover {{
         background: #0a6b52;
         border-color: #0a6b52;
     }}
@@ -174,9 +184,9 @@ def _css():
         display: inline-flex;
         align-items: center;
         gap: 0.4rem;
-        padding: 0.75rem 1.25rem;
+        padding: 0.3rem 0.65rem;
         border-radius: 999px;
-        font-size: 1.125rem;
+        font-size: 0.75rem;
         font-weight: 600;
         white-space: nowrap;
     }}
@@ -186,9 +196,9 @@ def _css():
         gap: 0.4rem;
         padding: 0.75rem 1.25rem;
         border-radius: 999px;
-        font-size: 1.125rem;
+        font-size: 1rem;
         font-weight: 600;
-        white-space: nowrap;
+        white-space: normal; text-align:center;
     }}
     .badge-green {{
         background: {MINT_CARD};
@@ -317,8 +327,19 @@ def _css():
             padding: 0.5rem 0.9rem;
         }}
     }}
+    [data-testid="stForm"] {{ background: {WHITE}; border: 1px solid {BORDER}; border-radius:16px; padding:1.25rem; }}
+    [data-testid="stHeader"] {{ background:rgba(247,250,248,.96); }}
+    .st-key-why_card, .st-key-rider_message, .st-key-driver_message {{ background:{WHITE}; border-radius:14px; }}
+    .agent-card {{ border-top:3px solid #abd2bf; box-shadow:0 3px 12px rgba(26,60,52,.035); }}
+    [data-testid="stExpander"] {{ background:{WHITE}; border-radius:12px; }}
+    [role="dialog"] {{ background:#f7faf8; }}
+    .resolution-grid {{ display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:1.5rem; }}
+    @media(max-width:760px) {{
+      .resolution-grid {{ grid-template-columns:1fr; gap:1rem; }}
+      .resolution-grid > div {{ border-right:0 !important; padding-right:0 !important; }}
+    }}
     </style>
-    """, unsafe_allow_html=True)
+    """)
 
 
 # ── Page config ─────────────────────────────────────────────────────────
@@ -342,6 +363,18 @@ if "executing" not in st.session_state:
 if "status_by_case" not in st.session_state:
     st.session_state["status_by_case"] = {}
 
+# A saved review link restores this exact investigation after a browser refresh.
+if not st.session_state.get("result") and st.query_params.get("review"):
+    try:
+        restored = get_review_by_id(st.query_params["review"])
+        if restored and restored["case_id"] in DROPDOWN_CASE_IDS and restored["case_id"] == st.query_params.get("case"):
+            snapshot = restored["ai_result"]
+            if snapshot.get("trip_id") == restored["case_id"] and snapshot.get("run_id") == restored["run_id"]:
+                st.session_state["selected_case"] = restored["case_id"]
+                st.session_state["result"] = snapshot
+    except RuntimeError as exc:
+        st.warning(str(exc))
+
 # Safely handle a previously selected case that is now hidden from the
 # dropdown (e.g. NS05 chosen in an earlier session). Fall back to the
 # first case in the allowlist.
@@ -358,7 +391,7 @@ def _format_category(cat: str) -> str:
 
 def _display_confidence(conf, colour: str = DARK_GREEN) -> str:
     """Return an HTML span for a confidence value, or 'Not available'."""
-    if conf is not None and isinstance(conf, (int, float)):
+    if type(conf) in (int, float) and math.isfinite(conf) and 0 <= conf <= 1:
         return (f'<div class="metric-value" style="color:{colour};">'
                 f'{conf:.0%}</div>')
     return f'<div class="metric-value" style="color:{colour};">Not available</div>'
@@ -394,8 +427,439 @@ def _bold_decisive(text: str) -> str:
     # Bold durations: 5 min, 300 seconds, 6 min, etc.
     text = _re.sub(r'(\d+\.?\d*\s*(?:min|minutes|seconds|sec))\b', r'**\1**', text)
     # Bold policy clause references: DEMO-NOSHOW-01, DEMO-ROUTE-01
-    text = _re.sub(r'(DEMO-[A-Z]+-\d+)', r'**\1**', text)
+    text = _re.sub(r'(DEMO-[A-Z]+-\d+|ORG-V2\.1-[A-Za-z0-9.]+)', r'**\1**', text)
     return text
+
+
+def _highlight_html(text: str) -> str:
+    escaped = html.escape(str(text))
+    return _re.sub(r'(S\$[\d,.]+|\b\d+(?:\.\d+)?\s*(?:km|m|min|minutes|seconds)\b|DEMO-[A-Z]+-\d+|ORG-V2\.1-[0-9.]+)', r'<strong>\1</strong>', escaped).replace("\n", "<br>")
+
+
+# ── Human-review workflow helpers ────────────────────────────────────────
+
+def _validate_review_form(
+    reviewer_id: str, human_decision: str, refund_amount: str,
+    rider_message: str, driver_message: str, final_explanation: str,
+    ai_result: dict,
+) -> list[str]:
+    """Validate the human-review form fields. Returns a list of error strings."""
+    errors = []
+    if human_decision not in {"refund", "no_action", "further_review"}:
+        errors.append("Select a human decision.")
+    if not reviewer_id or not reviewer_id.strip():
+        errors.append("Reviewer name is required.")
+    if not rider_message or not rider_message.strip():
+        errors.append("Proposed message to the rider is required.")
+    if not driver_message or not driver_message.strip():
+        errors.append("Proposed message to the driver is required.")
+    if not final_explanation or not final_explanation.strip():
+        errors.append("Final decision explanation is required.")
+
+    if human_decision == "refund":
+        if not refund_amount or not refund_amount.strip():
+            errors.append("Refund amount is required for a refund decision.")
+        else:
+            try:
+                cents = _to_cents(refund_amount)
+                if cents is None:
+                    errors.append("Refund amount is required for a refund decision.")
+                else:
+                    charged = charged_cents_for(ai_result)
+                    if charged is None:
+                        errors.append(
+                            "The charged amount is unknown; cannot accept a final refund amount."
+                        )
+                    elif cents > int(charged):
+                        errors.append(
+                            f"Refund cannot exceed the charged amount (S${int(charged) / 100:.2f})."
+                        )
+            except ValueError as exc:
+                errors.append(str(exc))
+    else:
+        if refund_amount and refund_amount.strip():
+            errors.append(
+                "No action and further review must not contain a refund award."
+            )
+    return errors
+
+
+def _render_human_review_card(result: dict, ruling: dict, selected_id: str):
+    """Render the human-review resolution card and review workflow.
+
+    Called when the AI outcome is human_review.  Checks persistent storage
+    for an existing review record for this case+run.  If found, renders the
+    post-submission card.  Otherwise, shows the review button.
+    """
+    run_id = result.get("run_id", "")
+    _model_conf = model_confidence_for(result)
+    _model_ruling = ruling.get("original_ruling")
+    _esc_reason = ruling.get("escalation_reason")
+    policy_version = result.get("policy_version", "")
+
+    # Check for an existing saved review for this exact case+run.
+    saved_review = st.session_state.get("_current_review")
+    storage_error = st.session_state.get("_review_storage_error")
+
+    if saved_review:
+        _render_saved_review_card(saved_review, result, ruling, selected_id)
+        if saved_review["human_decision"] != "further_review":
+            return
+        # Continuing a pending review appends a linked record to the same run.
+        st.caption("This review remains pending. Add a final decision when the missing evidence is available.")
+
+    if not saved_review:
+        # --- No saved review yet: show the pending card + review button -------
+        _esc_detail_html = ""
+        if _model_ruling is not None:
+            _esc_detail_html = (
+                f"The model recommended <strong>{_escape_md(_model_ruling)}</strong>, which differs "
+                f"from the deterministic policy baseline <strong>{_escape_md(policy_version or 'demo-v1')}</strong>. "
+                "The protective mismatch check escalated this to human review."
+            )
+        elif _esc_reason and "confidence" in _esc_reason.lower():
+            _esc_detail_html = (
+                "The model's confidence fell below the review threshold, "
+                "so the policy validator escalated this to human review."
+            )
+        else:
+            _esc_detail_html = _escape_md(_esc_reason or ruling.get("rationale", ""))
+
+        _html(f"""
+        <div class="card" style="background:#fef2f2;border:2px solid #b91c1c;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+                <div style="display:flex;align-items:center;gap:0.5rem;">
+                    <span style="font-size:1rem;">🛡</span>
+                    <span style="font-weight:600;color:#7f1d1d;font-size:0.9rem;">Resolution recommendation</span>
+                </div>
+                <span style="display:inline-flex;align-items:center;gap:0.35rem;padding:0.35rem 0.85rem;border-radius:999px;background:#b91c1c;color:#ffffff;font-weight:700;font-size:0.8rem;">⚠ Human review required</span>
+            </div>
+            <div class="resolution-grid">
+                <div style="border-right:1px solid #fecaca;padding-right:1rem;">
+                    <div class="metric-label" style="color:#7f1d1d;">Recommended outcome</div>
+                    <div class="metric-value" style="display:flex;align-items:center;gap:0.5rem;color:#7f1d1d;">
+                        <span style="width:28px;height:28px;border-radius:50%;background:#b91c1c;color:white;display:inline-flex;align-items:center;justify-content:center;font-size:0.9rem;">!</span>
+                        Human review required
+                    </div>
+                    <div class="metric-sub" style="color:#991b1b;">{policy_version}</div>
+                </div>
+                <div style="border-right:1px solid #fecaca;padding-right:1rem;">
+                    <div class="metric-label" style="color:#7f1d1d;">Refund decision</div>
+                    <div class="metric-value" style="color:#7f1d1d;">Pending human review</div>
+                    <div class="metric-sub" style="color:#991b1b;">No refund executed</div>
+                </div>
+                <div>
+                    <div class="metric-label" style="color:#7f1d1d;">Model confidence</div>
+                    {_display_confidence(_model_conf, "#b91c1c")}
+                    <div class="metric-sub" style="color:#991b1b;">Uncalibrated model estimate</div>
+                </div>
+            </div>
+            <div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid #fecaca;color:#7f1d1d;font-size:0.85rem;line-height:1.5;">
+                {_esc_detail_html}
+            </div>
+            <div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid #fecaca;">
+                <span class="muted" style="font-size:0.75rem;color:#991b1b;">Recommendation only. Confidence is a prototype heuristic, not calibrated accuracy. · Policy: {policy_version} · Measured run time: {result.get('elapsed_seconds', 0):.3f}s</span>
+            </div>
+        </div>
+        """)
+
+    if storage_error:
+        st.warning(storage_error + " The AI recommendation is still shown; no human decision has been saved.")
+        return
+    # Review button inside the card area.
+    st.markdown("")
+    _dialog_label = f"review_dialog_{selected_id}_{run_id}"
+
+    if st.button("📝 Review case", key=f"review_btn_{selected_id}_{run_id}",
+                 type="secondary", use_container_width=False):
+        st.session_state["review_form_open"] = _dialog_label
+        st.rerun()
+
+    _render_review_dialog(result, ruling, selected_id, run_id)
+
+
+def _render_review_dialog(result: dict, ruling: dict, selected_id: str, run_id: str):
+    """Render the review form in an st.dialog (if supported) or expander."""
+    _dialog_key = f"review_dialog_{selected_id}_{run_id}"
+    _is_open = st.session_state.get("review_form_open") == _dialog_key
+
+    # Determine charged amount for the refund cap display.
+    _charged = charged_cents_for(result)
+
+    _context_block = f"""
+    **Case ID:** {selected_id}  
+    **Investigation/Run ID:** {run_id}  
+    **Complaint:** {_escape_md(result.get('complaint', 'N/A'))}  
+    **Original AI recommendation:** {ruling.get('original_ruling') or ruling.get('ruling', 'N/A')}  
+    **Model confidence:** {_format_confidence_text(model_confidence_for(result))}  
+    **Escalation reason:** {ruling.get('escalation_reason') or 'N/A'}  
+    **Policy version:** {result.get('policy_version', 'N/A')}
+    """
+    if _charged is not None:
+        _context_block += f"\n**Charged amount:** {money(int(_charged))}"
+
+    # Try st.dialog (available in Streamlit >= 1.35).
+    _use_dialog = hasattr(st, "dialog")
+
+    if _use_dialog:
+        # Always define and call the dialog; it only shows when the user
+        # has clicked "Review case" (which sets review_form_open).
+        if _is_open:
+            dialog_options = {"width": "large"}
+            if "on_dismiss" in inspect.signature(st.dialog).parameters:
+                def dismiss_review():
+                    st.session_state.pop("review_form_open", None)
+                dialog_options["on_dismiss"] = dismiss_review
+            @st.dialog("Human review — demonstration workflow", **dialog_options)
+            def _review_dialog_inner():
+                _render_review_form_body(
+                    result, ruling, selected_id, run_id, _context_block, _charged
+                )
+            _review_dialog_inner()
+    else:
+        # Fallback: expandable form.
+        _expander_label = "📝 Human review — demonstration workflow"
+        with st.expander(_expander_label, expanded=_is_open):
+            _render_review_form_body(
+                result, ruling, selected_id, run_id, _context_block, _charged
+            )
+
+
+def _format_confidence_text(conf) -> str:
+    if type(conf) in (int, float) and math.isfinite(conf) and 0 <= conf <= 1:
+        return f"{conf:.0%}"
+    return "Not available"
+
+
+def _render_review_form_body(
+    result: dict, ruling: dict, selected_id: str, run_id: str,
+    context_block: str, charged_cents,
+):
+    """Render the actual review form fields and handle submission."""
+    st.caption("⚠ Demonstration reviewer workflow. A typed reviewer name is not "
+               "authentication and must not be presented as verified staff identity.")
+    st.markdown("---")
+    st.markdown(context_block)
+    st.markdown("---")
+
+    human_decision = st.selectbox(
+        "Human decision *",
+        options=["", "refund", "no_action", "further_review"],
+        format_func=lambda x: {
+            "": "— Select —",
+            "refund": "Refund",
+            "no_action": "No action",
+            "further_review": "Further review required",
+        }.get(x, x),
+        key=f"review_decision_{selected_id}_{run_id}",
+    )
+
+    # Use a form to prevent rerun on each keystroke, and to preserve
+    # entered values if validation fails.
+    with st.form(f"review_form_{selected_id}_{run_id}", clear_on_submit=False):
+        reviewer_id = st.text_input(
+            "Reviewer name or demo identifier *",
+            key=f"reviewer_id_{selected_id}_{run_id}",
+            placeholder="e.g. reviewer-alice",
+        )
+        refund_amount = st.text_input(
+            "Refund amount (S$) — required for Refund only",
+            key=f"refund_amount_{selected_id}_{run_id}",
+            placeholder="e.g. 5.00",
+            disabled=human_decision != "refund",
+            help=(f"Maximum: {money(charged_cents)}" if charged_cents is not None else "Charged amount unknown: refund cannot be finalised."),
+        )
+        if human_decision != "refund":
+            refund_amount = ""
+
+        rider_msg = st.text_area(
+            "Proposed message to the rider *",
+            key=f"rider_msg_{selected_id}_{run_id}",
+            height=80,
+        )
+        driver_msg = st.text_area(
+            "Proposed message to the driver *",
+            key=f"driver_msg_{selected_id}_{run_id}",
+            height=80,
+        )
+        final_explanation = st.text_area(
+            "Final decision explanation *",
+            key=f"final_expl_{selected_id}_{run_id}",
+            height=100,
+        )
+
+        col_save, col_cancel = st.columns(2)
+        with col_save:
+            submitted = st.form_submit_button("Save human review", type="primary")
+        with col_cancel:
+            cancelled = st.form_submit_button("Cancel", type="secondary")
+
+    if cancelled:
+        st.session_state.pop("review_form_open", None)
+        st.rerun()
+
+    if submitted:
+        errors = _validate_review_form(
+            reviewer_id, human_decision, refund_amount,
+            rider_msg, driver_msg, final_explanation, result,
+        )
+        if errors:
+            for e in errors:
+                st.error(e)
+            st.caption("Please correct the errors above and resubmit. "
+                       "Your entered values are preserved.")
+            return
+
+        # Persist the review record.
+        try:
+            saved = save_review(
+                case_id=selected_id,
+                run_id=run_id,
+                ai_result=result,
+                original_confidence=model_confidence_for(result),
+                escalation_reason=ruling.get("escalation_reason"),
+                reviewer_id=reviewer_id.strip(),
+                human_decision=human_decision,
+                refund_amount_str=refund_amount if human_decision == "refund" else None,
+                rider_message=rider_msg.strip(),
+                driver_message=driver_msg.strip(),
+                final_explanation=final_explanation.strip(),
+                policy_version=result.get("policy_version", ""),
+                linked_review_id=(st.session_state.get("_current_review") or {}).get("review_id"),
+                submission_id=st.session_state.setdefault(
+                    f"review_submission_{selected_id}_{run_id}_" + str((st.session_state.get("_current_review") or {}).get("review_id")),
+                    str(uuid.uuid4())),
+            )
+            st.session_state.pop("review_form_open", None)
+            st.session_state["last_saved_review"] = saved
+            st.query_params["review"] = saved["review_id"]
+            st.query_params["case"] = selected_id
+            st.rerun()
+        except ValueError as exc:
+            st.error(str(exc))
+            st.caption("Your entered values are preserved. Correct the error and resubmit.")
+        except RuntimeError as exc:
+            st.error(f"Storage failed: {exc}")
+            st.caption("The review was not saved. Your entered values are preserved. "
+                       "Check the database connection and try again.")
+
+
+def _render_saved_review_card(review: dict, ai_result: dict, ruling: dict, selected_id: str):
+    """Render the post-submission card after a human review is saved."""
+    decision = review["human_decision"]
+    is_final = decision in ("refund", "no_action")
+    is_further = decision == "further_review"
+
+    if is_final:
+        # Green card for a completed human decision.
+        _refund_text = money(review["refund_cents"]) if review["refund_cents"] > 0 \
+            else "No refund recommended"
+        _badge = (
+            '<span style="display:inline-flex;align-items:center;gap:0.35rem;'
+            'padding:0.35rem 0.85rem;border-radius:999px;background:#0d7a5e;'
+            'color:#ffffff;font-weight:700;font-size:0.8rem;">'
+            '✓ Human review completed</span>'
+        )
+        _bg = MINT_CARD
+        _border = "#c5e8dc"
+        _heading_color = DARK_GREEN
+        _metric_color = DARK_GREEN
+        _sub_color = MUTED
+        _icon_bg = PRIMARY_GREEN
+        _icon = "✓"
+        _outcome_text = "Human review: " + ("Refund" if decision == "refund" else "No action")
+    else:
+        # Amber/red card for further review required.
+        _refund_text = "Pending further review"
+        _badge = (
+            '<span style="display:inline-flex;align-items:center;gap:0.35rem;'
+            'padding:0.35rem 0.85rem;border-radius:999px;background:#b45309;'
+            'color:#ffffff;font-weight:700;font-size:0.8rem;">'
+            '⚠ Further human review required</span>'
+        )
+        _bg = "#fffbeb"
+        _border = "#fde68a"
+        _heading_color = "#92400e"
+        _metric_color = "#92400e"
+        _sub_color = "#a16207"
+        _icon_bg = "#b45309"
+        _icon = "!"
+        _outcome_text = "Further review required"
+
+    _conf_html = '<div class="metric-value" style="color:' + _metric_color + ';">—</div>'
+
+    _html(f"""
+    <div class="card" style="background:{_bg};border:2px solid {_border};">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+            <div style="display:flex;align-items:center;gap:0.5rem;">
+                <span style="font-size:1rem;">🛡</span>
+                <span style="font-weight:600;color:{_heading_color};font-size:0.9rem;">Resolution recommendation</span>
+            </div>
+            {_badge}
+        </div>
+        <div class="resolution-grid">
+            <div style="border-right:1px solid {_border};padding-right:1rem;">
+                <div class="metric-label" style="color:{_sub_color};">Recommended outcome</div>
+                <div class="metric-value" style="display:flex;align-items:center;gap:0.5rem;color:{_metric_color};">
+                    <span style="width:28px;height:28px;border-radius:50%;background:{_icon_bg};color:white;display:inline-flex;align-items:center;justify-content:center;font-size:0.9rem;">{_icon}</span>
+                    {_outcome_text}
+                </div>
+                <div class="metric-sub" style="color:{_sub_color};">{review.get('policy_version', '')}</div>
+            </div>
+            <div style="border-right:1px solid {_border};padding-right:1rem;">
+                <div class="metric-label" style="color:{_sub_color};">Refund</div>
+                <div class="metric-value" style="color:{_metric_color};">{_refund_text}</div>
+                <div class="metric-sub" style="color:{_sub_color};">Human decision — not a payment</div>
+            </div>
+            <div>
+                <div class="metric-label" style="color:{_sub_color};">Confidence</div>
+                {_conf_html}
+                <div class="metric-sub" style="color:{_sub_color};">Not applicable — human decision</div>
+            </div>
+        </div>
+        <div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid {_border};color:{_heading_color};font-size:0.85rem;line-height:1.5;">
+            <strong>Reviewer:</strong> {_escape_md(review.get('reviewer_id', ''))} ·
+            <strong>Reviewed at:</strong> {_escape_md(review.get('created_at', ''))}
+        </div>
+        <div style="margin-top:0.5rem;color:{_heading_color};font-size:0.85rem;line-height:1.5;">
+            <strong>Explanation:</strong> {_escape_md(review.get('final_explanation', ''))}
+        </div>
+        <div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid {_border};">
+            <span class="muted" style="font-size:0.75rem;color:{_sub_color};">
+                {("Human review completed and recorded." if is_final else "Further review remains pending.")} No refund has been paid and no message has been sent.
+            </span>
+        </div>
+    </div>
+    """)
+
+    _pm1, _pm2 = st.columns(2)
+    with _pm1, st.container(border=True, key="rider_message"):
+        st.markdown("**Proposed message to the rider**")
+        st.text(review.get("rider_message", ""))
+    with _pm2, st.container(border=True, key="driver_message"):
+        st.markdown("**Proposed message to the driver**")
+        st.text(review.get("driver_message", ""))
+
+    # Collapsed original AI review section.
+    _html("<div style='margin-top:0.75rem;'></div>")
+    with st.expander("Original AI review", expanded=False):
+        _ai_conf = model_confidence_for(ai_result)
+        st.write(f"**AI recommendation:** {ruling.get('original_ruling') or ruling.get('ruling', 'N/A')}")
+        st.write(f"**Model confidence:** {_format_confidence_text(_ai_conf)}")
+        st.write(f"**Escalation reason:** {ruling.get('escalation_reason') or 'N/A'}")
+        st.write(f"**Policy version:** {ai_result.get('policy_version', 'N/A')}")
+        st.write(f"**AI rationale:** {ruling.get('rationale', 'N/A')}")
+        st.json(ai_result)
+
+    # JSON download of the review record.
+    _html("<div style='margin-top:0.75rem;'></div>")
+    with st.expander("Download human review record (JSON)"):
+        st.download_button(
+            "Download review record",
+            data=json.dumps(review, indent=2, default=str),
+            file_name=f'{selected_id}_human_review_{review.get("review_id", "unknown")[:8]}.json',
+            mime="application/json",
+        )
 
 
 # ── Sidebar ─────────────────────────────────────────────────────────────
@@ -415,8 +879,15 @@ with st.sidebar:
     )
 
     if selected != st.session_state["selected_case"]:
+        if st.session_state.get("result"):
+            st.session_state.setdefault("results_by_case", {})[st.session_state["selected_case"]] = st.session_state["result"]
         st.session_state["selected_case"] = selected
+        st.query_params.clear()
         st.session_state.pop("result", None)
+        cached = st.session_state.get("results_by_case", {}).get(selected)
+        if cached:
+            st.session_state["result"] = cached
+        st.session_state.pop("review_form_open", None)
         st.session_state.pop("adp_debug", None)
         st.session_state.pop("validation_debug", None)
         # New case shows "Ready" unless it already has a completed result.
@@ -503,7 +974,7 @@ def _badge_html(status: str) -> str:
     height:100%;padding-bottom:0.35rem;">{_badge[status]}</div>"""
 
 
-st.markdown(f"""
+_html(f"""
 <div class="top-bar">
     <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.85rem;color:#64748b;">
         <span>Disputes</span>
@@ -511,27 +982,27 @@ st.markdown(f"""
         <span style="font-weight:600;color:#1a3c34;">Case {selected_id}</span>
     </div>
 </div>
-""", unsafe_allow_html=True)
+""")
 
 
 # ── Page heading ────────────────────────────────────────────────────────
-head_col1, head_col2 = st.columns([3, 1])
+head_col1, head_col2 = st.columns([3, 2])
 with head_col1:
-    st.markdown('<div class="eyebrow">Evidence-led resolution</div>', unsafe_allow_html=True)
-    st.markdown('<h1 class="page-title">Ride Dispute Review</h1>', unsafe_allow_html=True)
-    st.markdown('<div class="page-subtitle">Three specialised AI agents. Every perspective considered.</div>', unsafe_allow_html=True)
+    _html('<div class="eyebrow">Evidence-led resolution</div>')
+    _html('<h1 class="page-title">Ride Dispute Review</h1>')
+    _html('<div class="page-subtitle">Three specialised AI agents. Every perspective considered.</div>')
 # Updateable placeholder so the badge can switch to "Investigating…" before
 # the blocking network request begins, without a full page rerun.
 status_placeholder = head_col2.empty()
 status_placeholder.markdown(_badge_html(effective_status), unsafe_allow_html=True)
 
-st.markdown("<div style='margin-bottom:1.25rem;'></div>", unsafe_allow_html=True)
+_html("<div style='margin-bottom:1.25rem;'></div>")
 
 
 # ── Complaint card ─────────────────────────────────────────────────────-
 with st.form("complaint_form"):
-    st.markdown(f"""
-    <div class="card">
+    _html(f"""
+    <div>
         <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.35rem;">
             <span class="queue-id">{selected_id} · {_format_category(case['category'])}</span>
             <span class="badge badge-grey" style="margin-left:auto;">Rider-submitted dispute</span>
@@ -541,7 +1012,9 @@ with st.form("complaint_form"):
             <div style="display:flex;align-items:center;gap:0.4rem;color:#64748b;font-size:0.75rem;font-weight:600;margin-bottom:0.4rem;text-transform:uppercase;letter-spacing:0.04em;">
                 <span style="font-size:0.9rem;">❝</span> Rider's complaint
             </div>
-    """, unsafe_allow_html=True)
+        </div>
+    </div>
+    """)
 
     complaint = st.text_area(
         "Rider's complaint",
@@ -552,19 +1025,19 @@ with st.form("complaint_form"):
         height=90,
     )
 
-    st.markdown("</div>", unsafe_allow_html=True)
-
     c1, c2 = st.columns([4, 1])
     with c2:
         submitted = st.form_submit_button(
             "⚡ Investigate dispute", type="primary", use_container_width=True,
             disabled=st.session_state.get("executing", False),
         )
-    st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ── Investigation handling (behaviour preserved) ────────────────────────
 if submitted and not st.session_state["executing"]:
+    st.query_params.clear()
+    st.session_state.get("results_by_case", {}).pop(selected_id, None)
+    st.session_state.pop("review_form_open", None)
     st.session_state["executing"] = True
     st.session_state.pop("result", None)
     st.session_state.pop("adp_debug", None)
@@ -579,6 +1052,8 @@ if submitted and not st.session_state["executing"]:
     case["complaint"] = complaint.strip()
     if not case["complaint"]:
         st.session_state["status_by_case"][selected_id] = "ready"
+        st.warning("Enter a complaint before investigating.")
+        status_placeholder.markdown(_badge_html("ready"), unsafe_allow_html=True)
     else:
         try:
             client = ADPClient(settings(ROOT))
@@ -648,6 +1123,7 @@ if submitted and not st.session_state["executing"]:
             st.caption("No recommendation was accepted.")
             st.session_state["status_by_case"][selected_id] = "failed"
     st.session_state["executing"] = False
+    status_placeholder.markdown(_badge_html(st.session_state["status_by_case"].get(selected_id, "ready")), unsafe_allow_html=True)
 
 
 # ── Diagnostics (secondary expanders, kept available) ───────────────────
@@ -736,73 +1212,26 @@ if result and result.get("trip_id") == selected_id:
             break
 
     # Resolution card
-    st.markdown("<div style='margin-top:1.25rem;'></div>", unsafe_allow_html=True)
+    _html("<div style='margin-top:1.25rem;'></div>")
+
+    # Check if a saved human review exists for this case+run.
+    _saved_hr = None
+    st.session_state.pop("_review_storage_error", None)
+    if human_review and result.get("run_id"):
+        try:
+            _saved_hr = get_review_for_run(selected_id, result["run_id"])
+        except RuntimeError as exc:
+            st.session_state["_review_storage_error"] = str(exc)
+    st.session_state["_current_review"] = _saved_hr
 
     if human_review:
-        # ── Human-review branch: unified 3-column card, red-styled ────────
-        # Determine the actual model confidence (before mismatch override)
-        # vs. the fallback confidence applied by the policy validator.
-        _model_conf = ruling.get("original_confidence")
-        _model_ruling = ruling.get("original_ruling")
-        _esc_reason = ruling.get("escalation_reason") or _escalation_reason or ""
-
-        # Distinguish the actual escalation cause: mismatch (model vs.
-        # policy) or low confidence.  Do not always claim "could not decide".
-        if _model_ruling is not None:
-            _esc_detail = (
-                f"The model recommended <strong>{_escape_md(_model_ruling)}</strong>, which differs "
-                f"from the deterministic policy baseline <strong>{_escape_md(result.get('policy_version', 'demo-v1'))}</strong>. "
-                "The protective mismatch check escalated this to human review."
-            )
-        elif "confidence" in _esc_reason.lower():
-            _esc_detail = (
-                "The model's confidence fell below the review threshold, "
-                "so the policy validator escalated this to human review."
-            )
-        else:
-            _esc_detail = _escape_md(_esc_reason or ruling["rationale"])
-
-        st.markdown(f"""
-        <div class="card" style="background:#fef2f2;border:2px solid #b91c1c;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
-                <div style="display:flex;align-items:center;gap:0.5rem;">
-                    <span style="font-size:1rem;">🛡</span>
-                    <span style="font-weight:600;color:#7f1d1d;font-size:0.9rem;">Resolution recommendation</span>
-                </div>
-                <span style="display:inline-flex;align-items:center;gap:0.35rem;padding:0.35rem 0.85rem;border-radius:999px;background:#b91c1c;color:#ffffff;font-weight:700;font-size:0.8rem;">⚠ Human review required</span>
-            </div>
-            <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:1.5rem;">
-                <div style="border-right:1px solid #fecaca;padding-right:1rem;">
-                    <div class="metric-label" style="color:#7f1d1d;">Recommended outcome</div>
-                    <div class="metric-value" style="display:flex;align-items:center;gap:0.5rem;color:#7f1d1d;">
-                        <span style="width:28px;height:28px;border-radius:50%;background:#b91c1c;color:white;display:inline-flex;align-items:center;justify-content:center;font-size:0.9rem;">!</span>
-                        Human review required
-                    </div>
-                    <div class="metric-sub" style="color:#991b1b;">{result['policy_version']}</div>
-                </div>
-                <div style="border-right:1px solid #fecaca;padding-right:1rem;">
-                    <div class="metric-label" style="color:#7f1d1d;">Refund decision</div>
-                    <div class="metric-value" style="color:#7f1d1d;">Pending human review</div>
-                    <div class="metric-sub" style="color:#991b1b;">No refund executed</div>
-                </div>
-                <div>
-                    <div class="metric-label" style="color:#7f1d1d;">Model confidence</div>
-                    {_display_confidence(_model_conf, "#b91c1c")}
-                    <div class="metric-sub" style="color:#991b1b;">Uncalibrated model estimate</div>
-                </div>
-            </div>
-            <div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid #fecaca;color:#7f1d1d;font-size:0.85rem;line-height:1.5;">
-                {_esc_detail}
-            </div>
-            <div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid #fecaca;">
-                <span class="muted" style="font-size:0.75rem;color:#991b1b;">Recommendation only. Confidence is a prototype heuristic, not calibrated accuracy. · Policy: {result['policy_version']} · Measured run time: {result["elapsed_seconds"]:.3f}s</span>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        # Delegate to the human-review workflow, which checks persistent
+        # storage for an existing review and renders the appropriate card.
+        _render_human_review_card(result, ruling, selected_id)
 
     else:
         # ── Normal (refund / no_action) branch: existing HTML card ────────
-        st.markdown(f"""
+        _html(f"""
         <div class="card" style="background:{MINT_CARD};border-color:#c5e8dc;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
                 <div style="display:flex;align-items:center;gap:0.5rem;">
@@ -811,7 +1240,7 @@ if result and result.get("trip_id") == selected_id:
                 </div>
                 <span class="badge badge-grey">AI recommendation</span>
             </div>
-            <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:1.5rem;">
+            <div class="resolution-grid">
                 <div style="border-right:1px solid #c5e8dc;padding-right:1rem;">
                     <div class="metric-label">Recommended outcome</div>
                     <div class="metric-value" style="display:flex;align-items:center;gap:0.5rem;">
@@ -835,35 +1264,21 @@ if result and result.get("trip_id") == selected_id:
                 <span class="muted" style="font-size:0.75rem;">Recommendation only. Confidence is a prototype heuristic, not calibrated accuracy. · Measured run time: {result["elapsed_seconds"]:.3f}s</span>
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """)
 
     # Explanation + evidence cards
-    st.markdown("<div style='margin-top:1.25rem;'></div>", unsafe_allow_html=True)
+    _html("<div style='margin-top:1.25rem;'></div>")
     why_col, ev_col = st.columns([2, 1])
 
     with why_col:
-        st.markdown("""
-        <div class="card" style="height:100%;">
-            <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
-                <span style="font-size:1rem;">📋</span>
-                <span class="card-title" style="margin:0;">Why this outcome?</span>
-            </div>
-        """, unsafe_allow_html=True)
-
-        # Render the rationale as escaped markdown text with paragraph
-        # separation.  Bold key terms by pattern-matching amounts, distances,
-        # durations and policy references without another AI call.
-        _rationale = ruling["rationale"]
-        _esc_rationale = _escape_md(_rationale)
-        _bold_rationale = _bold_decisive(_esc_rationale)
-        st.markdown(_bold_rationale)
-
-        st.markdown("""
-            <div style="display:flex;align-items:center;gap:0.4rem;color:#0d7a5e;font-size:0.8rem;font-weight:500;margin-top:0.5rem;">
-                <span>✓</span> Grounded in trip, message, route and payment evidence
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        with st.container(border=True, key="why_card"):
+            st.markdown("**Why this outcome?**")
+            _rationale = _saved_hr["final_explanation"] if _saved_hr else ruling["rationale"]
+            if human_review and not _saved_hr:
+                _html('<div style="color:#991b1b;line-height:1.65;">' + _highlight_html(_rationale) + '</div>')
+            else:
+                st.markdown(_bold_decisive(_escape_md(_rationale)))
+            st.caption("Human reviewer explanation" if _saved_hr else "Based on the supplied evidence and policy")
 
     with ev_col:
         metrics = result["metrics"]
@@ -892,7 +1307,7 @@ if result and result.get("trip_id") == selected_id:
             for k, v in ev_rows
         )
 
-        st.markdown(f"""
+        _html(f"""
         <div class="card" style="height:100%;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
                 <div style="display:flex;align-items:center;gap:0.5rem;">
@@ -902,29 +1317,29 @@ if result and result.get("trip_id") == selected_id:
             </div>
             {ev_html}
         </div>
-        """, unsafe_allow_html=True)
+        """)
 
     # ── Tabs ────────────────────────────────────────────────────────────
-    st.markdown("<div style='margin-top:1.25rem;'></div>", unsafe_allow_html=True)
+    _html("<div style='margin-top:1.25rem;'></div>")
     tab_review, tab_evidence, tab_messages = st.tabs([
         "Agent review", "Evidence & policy", "Proposed party messages",
     ])
 
     # ── Tab 1: Agent review ─────────────────────────────────────────────
     with tab_review:
-        st.markdown("""
+        _html("""
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
             <span class="muted">Different perspectives. One evidence-based recommendation.</span>
             <span class="badge badge-grey">Multi-agent review</span>
         </div>
-        """, unsafe_allow_html=True)
+        """)
 
         advocates = result.get("advocates", {})
         adp_activity = result.get("adp_activity", [])
 
         a1, a2, a3 = st.columns(3)
         with a1:
-            st.markdown("""
+            _html("""
             <div class="agent-card">
                 <div class="agent-icon" style="background:#eff6ff;color:#2563eb;">👤</div>
                 <div class="agent-name">Rider Advocate</div>
@@ -936,9 +1351,9 @@ if result and result.get("trip_id") == selected_id:
                     <span>⚡</span> Managed internally by ADP
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+            """)
         with a2:
-            st.markdown("""
+            _html("""
             <div class="agent-card">
                 <div class="agent-icon" style="background:#fff7ed;color:#ea580c;">🚕</div>
                 <div class="agent-name">Driver Advocate</div>
@@ -950,10 +1365,10 @@ if result and result.get("trip_id") == selected_id:
                     <span>⚡</span> Managed internally by ADP
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+            """)
         with a3:
             judge_summary = _escape_md(ruling["rationale"])
-            st.markdown(f"""
+            _html(f"""
             <div class="agent-card">
                 <div class="agent-icon" style="background:{MINT_CARD};color:{PRIMARY_GREEN};">⚖</div>
                 <div class="agent-name">Judge</div>
@@ -965,16 +1380,16 @@ if result and result.get("trip_id") == selected_id:
                     <span>✓</span> Ruling complete · {ruling['policy_ids'][0] if ruling['policy_ids'] else 'policy'}
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+            """)
 
-        st.markdown("""
+        _html("""
         <div style="margin-top:0.75rem;color:#64748b;font-size:0.8rem;line-height:1.4;">
             Individual advocate reports are not returned as separate structured outputs. The Judge's ruling summarises the competing arguments.
         </div>
-        """, unsafe_allow_html=True)
+        """)
 
         # Investigation activity (collapsible, collapsed by default)
-        st.markdown("<div style='margin-top:1.5rem;'></div>", unsafe_allow_html=True)
+        _html("<div style='margin-top:1.5rem;'></div>")
         with st.expander("Investigation activity", expanded=False):
             if adp_activity:
                 for i, a in enumerate(adp_activity):
@@ -995,35 +1410,35 @@ if result and result.get("trip_id") == selected_id:
 
     # ── Tab 2: Evidence and policy ──────────────────────────────────────
     with tab_evidence:
-        st.markdown("""
+        _html("""
         <div class="card" style="margin-bottom:1rem;">
             <div class="card-title">Python-calculated metrics</div>
-        """, unsafe_allow_html=True)
+        """)
         st.json(result["metrics"])
-        st.markdown("</div>", unsafe_allow_html=True)
+        _html("</div>")
 
         timeline = build_evidence_timeline(case)
         if timeline:
-            st.markdown("""
+            _html("""
             <div class="card" style="margin-bottom:1rem;">
                 <div class="card-title">Evidence timeline (Asia/Singapore time)</div>
                 <div class="muted" style="margin-bottom:0.75rem;">Claims are text from chat messages; observations are GPS/telemetry events.</div>
-            """, unsafe_allow_html=True)
+            """)
             for entry in timeline:
                 tag = "Claim" if entry["type"] == "claim" else "Observation"
                 st.write(f'{entry["timestamp"]} — **{entry["label"]}** ({tag})')
                 st.caption(entry["detail"])
-            st.markdown("</div>", unsafe_allow_html=True)
+            _html("</div>")
         else:
             st.info("No timestamped events are available for a timeline in this case.")
 
-        st.markdown('<div class="card-title">Evidence records</div>', unsafe_allow_html=True)
+        _html('<div class="card-title">Evidence records</div>')
         for item in result["evidence"]:
             with st.expander(item["id"]):
                 st.json(item)
 
-        st.markdown("<div style='margin-top:1rem;'></div>", unsafe_allow_html=True)
-        st.markdown(f'<div class="card-title">Policy ({result["policy_version"]})</div>', unsafe_allow_html=True)
+        _html("<div style='margin-top:1rem;'></div>")
+        _html(f'<div class="card-title">Policy ({result["policy_version"]})</div>')
         if result.get("policy_version") == "organiser-v2.1":
             st.caption("Organiser-provided hackathon reference; not verified production Ryde policy.")
             pol_evidence = [e for e in result["evidence"] if e.get("tool") == "get_policy"]
@@ -1039,31 +1454,29 @@ if result and result.get("trip_id") == selected_id:
 
     # ── Tab 3: Proposed party messages ──────────────────────────────────
     with tab_messages:
-        m1, m2 = st.columns(2)
-        with m1:
-            st.markdown("""
-            <div class="card" style="height:100%;">
-                <div class="card-title">For the rider</div>
-            """, unsafe_allow_html=True)
-            st.write(ruling["rider_message"])
-            st.markdown("</div>", unsafe_allow_html=True)
-        with m2:
-            st.markdown("""
-            <div class="card" style="height:100%;">
-                <div class="card-title">For the driver</div>
-            """, unsafe_allow_html=True)
-            st.write(ruling["driver_message"])
-            st.markdown("</div>", unsafe_allow_html=True)
-        st.caption("No payment is executed and no message is sent to either party.")
+        if _saved_hr:
+            st.info("The human reviewer's proposed messages are shown above in the "
+                    "resolution card. The original AI's proposed messages are preserved "
+                    "in the collapsed 'Original AI review' section.")
+        else:
+            m1, m2 = st.columns(2)
+            with m1, st.container(border=True):
+                st.markdown("**For the rider**")
+                st.text(ruling["rider_message"])
+            with m2, st.container(border=True):
+                st.markdown("**For the driver**")
+                st.text(ruling["driver_message"])
+            st.caption("No payment is executed and no message is sent to either party.")
 
     # ── JSON download (secondary control) ───────────────────────────────
-    with st.expander("Download case report (JSON)"):
-        st.download_button(
-            "Download report",
-            data=json.dumps(result, indent=2),
-            file_name=f'{selected_id}_multi_agent_report.json',
-            mime="application/json",
-        )
+    if not _saved_hr:
+        with st.expander("Download case report (JSON)"):
+            st.download_button(
+                "Download report",
+                data=json.dumps(result, indent=2),
+                file_name=f'{selected_id}_multi_agent_report.json',
+                mime="application/json",
+            )
 
 elif result and result.get("trip_id") != selected_id:
     st.info(f"The displayed result is for case `{result['trip_id']}`. Select that case to view it again, or investigate the current case.")
@@ -1074,8 +1487,8 @@ else:
 
 
 # ── Footer ──────────────────────────────────────────────────────────────
-st.markdown("<div style='margin-top:2rem;'></div>", unsafe_allow_html=True)
-st.markdown("""
+_html("<div style='margin-top:2rem;'></div>")
+_html("""
 <div style="border-top:1px solid #e2e8f0;padding-top:1rem;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:0.75rem;color:#64748b;font-size:0.75rem;">
     <div>
         <div style="font-weight:600;color:#1a3c34;margin-bottom:0.2rem;">Built for fair resolutions. Designed for human oversight.</div>
@@ -1085,4 +1498,4 @@ st.markdown("""
         <div class="badge badge-grey">Prototype · Recommendations only</div>
     </div>
 </div>
-""", unsafe_allow_html=True)
+""")

@@ -423,6 +423,8 @@ def check_judge(obj, evidence_ids, policy_ids, charged_cents):
     cents = obj.get("refund_cents")
     if type(cents) is not int or not 0 <= cents <= charged_cents:
         raise OutputError("Judge refund must be integer cents within the charged amount.")
+    if obj["ruling"] == "refund" and cents == 0:
+        raise OutputError("A refund ruling must specify a positive amount.")
     if obj["ruling"] != "refund" and cents != 0:
         raise OutputError("Only a refund ruling may specify a refund amount.")
     confidence = obj.get("confidence")
@@ -455,6 +457,8 @@ def _validate_multi_agent_ruling(obj: dict, charged_cents: int, clause_ids: set,
     cents = obj.get("refund_cents")
     if type(cents) is not int or not 0 <= cents <= charged_cents:
         raise OutputError("Judge refund must be integer cents within the charged amount.")
+    if obj["ruling"] == "refund" and cents == 0:
+        raise OutputError("A refund ruling must specify a positive amount.")
     if obj["ruling"] != "refund" and cents != 0:
         raise OutputError("Only a refund ruling may specify a refund amount.")
     confidence = obj.get("confidence")
@@ -464,18 +468,8 @@ def _validate_multi_agent_ruling(obj: dict, charged_cents: int, clause_ids: set,
         if not isinstance(obj.get(field), str) or not obj[field].strip():
             raise OutputError(f"Judge must provide a non-empty {field}.")
 
-    # Validate evidence/policy IDs if the agent included them.
-    evidence_ids = obj.get("evidence_ids")
-    if evidence_ids is not None:
-        check_citations(obj, all_evidence_ids, clause_ids)
-    policy_ids = obj.get("policy_ids")
-    if policy_ids is not None:
-        check_citations({"evidence_ids": obj.get("evidence_ids", []),
-                         "policy_ids": policy_ids}, all_evidence_ids, clause_ids)
-
-    # Fill in missing evidence_ids/policy_ids rather than inventing them.
-    obj.setdefault("evidence_ids", sorted(all_evidence_ids))
-    obj.setdefault("policy_ids", sorted(clause_ids))
+    # Citations must be supplied by the Judge; never fill them in on its behalf.
+    check_citations(obj, all_evidence_ids, clause_ids)
     return obj
 
 
@@ -559,8 +553,15 @@ def resolve(case: dict, mode="multi_agent", client=None, on_event=None) -> dict:
                 "accepted_policy_ids": accepted_policy_ids,
                 "judge_ruling_json": copy.deepcopy(ruling),
             }
+            # Attach the ADP debug metadata so the UI diagnostic expander can
+            # show the actual ruling value, selected MessageId, completion
+            # status and raw reply text that led to the validation failure.
+            exc.debug_info = adp_debug
             raise
         log("ADP multi-agent", "model_recommendation", copy.deepcopy(ruling))
+        # Capture original model ruling and confidence before any override.
+        original_ai_ruling = copy.deepcopy(ruling)
+        _orig_ruling = ruling["ruling"]
         mismatch = (ruling["ruling"], ruling["refund_cents"]) != (baseline["ruling"], baseline["refund_cents"])
         if is_organiser:
             # Organiser cases use their own policy thresholds, not the synthetic one.
@@ -569,7 +570,13 @@ def resolve(case: dict, mode="multi_agent", client=None, on_event=None) -> dict:
             if mismatch or ruling["confidence"] < review_threshold:
                 reason = ("The model recommendation differs from the organiser-v2.1 policy check."
                           if mismatch else "The model confidence falls below the organiser policy threshold.")
+                # Preserve the model's original confidence so the UI can show
+                # it separately from the fallback confidence.
+                _orig_conf = ruling.get("confidence")
                 ruling.update({"ruling": "human_review", "refund_cents": 0, "confidence": 0.35,
+                               "original_confidence": _orig_conf,
+                               "original_ruling": _orig_ruling if mismatch else None,
+                               "escalation_reason": reason,
                                "rationale": reason + " Refer the full evidence and both cases to a reviewer.",
                                "rider_message": "Your dispute needs a reviewer; no refund has been executed.",
                                "driver_message": "This dispute needs a reviewer; no payment action has been executed."})
@@ -578,7 +585,11 @@ def resolve(case: dict, mode="multi_agent", client=None, on_event=None) -> dict:
             if mismatch or ruling["confidence"] < policy["review_confidence_threshold"]:
                 reason = ("The model recommendation differs from the deterministic demo-policy check."
                           if mismatch else "The model confidence falls below the prototype review threshold.")
+                _orig_conf = ruling.get("confidence")
                 ruling.update({"ruling": "human_review", "refund_cents": 0, "confidence": 0.35,
+                               "original_confidence": _orig_conf,
+                               "original_ruling": _orig_ruling if mismatch else None,
+                               "escalation_reason": reason,
                                "rationale": reason + " Refer the full evidence and both cases to a reviewer.",
                                "rider_message": "Your dispute needs a reviewer; no refund has been executed.",
                                "driver_message": "This dispute needs a reviewer; no payment action has been executed."})
@@ -591,7 +602,7 @@ def resolve(case: dict, mode="multi_agent", client=None, on_event=None) -> dict:
                 "confidence_note": "Prototype heuristic / model self-assessment; not calibrated accuracy.",
                 "advocates": arguments, "evidence": list(all_evidence.values()), "metrics": metrics,
                 "ruling": ruling, "trace": trace, "adp_activity": adp_activity,
-                "adp_debug": adp_debug,
+                "adp_debug": adp_debug, "original_ai_ruling": original_ai_ruling,
                 "elapsed_seconds": round(time.perf_counter() - start, 6)}
 
     # --- Offline / legacy ADP Standard Mode -----------------------------------
@@ -634,11 +645,16 @@ def resolve(case: dict, mode="multi_agent", client=None, on_event=None) -> dict:
                            "evidence": list(all_evidence.values())}, judge_session)
         ruling = check_judge(ruling, set(all_evidence), clause_ids, case["payment"]["charged_cents"])
         log("Judge", "model_recommendation", copy.deepcopy(ruling))
+        _orig_ruling = ruling["ruling"]
         mismatch = (ruling["ruling"], ruling["refund_cents"]) != (baseline["ruling"], baseline["refund_cents"])
         if mismatch or ruling["confidence"] < policy["review_confidence_threshold"]:
             reason = ("The model recommendation differs from the deterministic demo-policy check."
                       if mismatch else "The model confidence falls below the prototype review threshold.")
+            _orig_conf = ruling.get("confidence")
             ruling.update({"ruling": "human_review", "refund_cents": 0, "confidence": 0.35,
+                           "original_confidence": _orig_conf,
+                           "original_ruling": _orig_ruling if mismatch else None,
+                           "escalation_reason": reason,
                            "rationale": reason + " Refer the full evidence and both cases to a reviewer.",
                            "rider_message": "Your dispute needs a reviewer; no refund has been executed.",
                            "driver_message": "This dispute needs a reviewer; no payment action has been executed."})
