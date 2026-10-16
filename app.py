@@ -415,25 +415,30 @@ def _escape_md(text: str) -> str:
 
 import re as _re
 
-def _bold_decisive(text: str) -> str:
-    """Bold decisive amounts, distances, durations and policy references
-    in escaped rationale text. Preserves negations and uncertainty."""
-    if not text:
-        return ""
-    # Bold monetary amounts: S$5, S$4.50, etc.
-    text = _re.sub(r'(S\$[\d,.]+)', r'**\1**', text)
-    # Bold distances: 4.3 km, 100 m, etc.
-    text = _re.sub(r'(\d+\.?\d*\s*(?:km|m))\b', r'**\1**', text)
-    # Bold durations: 5 min, 300 seconds, 6 min, etc.
-    text = _re.sub(r'(\d+\.?\d*\s*(?:min|minutes|seconds|sec))\b', r'**\1**', text)
-    # Bold policy clause references: DEMO-NOSHOW-01, DEMO-ROUTE-01
-    text = _re.sub(r'(DEMO-[A-Z]+-\d+|ORG-V2\.1-[A-Za-z0-9.]+)', r'**\1**', text)
-    return text
-
-
 def _highlight_html(text: str) -> str:
+    """Render public text as escaped HTML, with limited bold emphasis only.
+
+    Dollar signs stay literal: this output must be passed to st.html, never
+    Markdown's math parser. Model-provided HTML cannot become executable markup.
+    """
     escaped = html.escape(str(text))
-    return _re.sub(r'(S\$[\d,.]+|\b\d+(?:\.\d+)?\s*(?:km|m|min|minutes|seconds)\b|DEMO-[A-Z]+-\d+|ORG-V2\.1-[0-9.]+)', r'<strong>\1</strong>', escaped).replace("\n", "<br>")
+    pattern = r'(S?\$\d[\d,]*(?:\.\d{1,2})?|\b\d+(?:\.\d+)?\s*(?:kilometers|kilometres|meters|metres|minutes|seconds|km|min|sec|m)\b|DEMO-[A-Z]+-\d+|ORG-V2\.1-\d+\.\d+)'
+    parts = _re.split(r'(\*\*.+?\*\*)', escaped, flags=_re.DOTALL)
+    rendered = []
+    for part in parts:
+        if part.startswith("**") and part.endswith("**") and len(part) > 4:
+            rendered.append("<strong>" + part[2:-2] + "</strong>")
+        else:
+            rendered.append(_re.sub(pattern, r'<strong>\1</strong>', part))
+    return "".join(rendered).replace("\n", "<br>")
+
+
+def _public_explanation(text: str, *, urgent: bool = False):
+    colour = "#991b1b" if urgent else TEXT
+    st.html('<div class="public-explanation" style="color:' + colour +
+            ';font-family:inherit;font-size:1rem;line-height:1.65;white-space:normal;'
+            'overflow-wrap:anywhere;word-break:normal;max-width:100%;">' +
+            _highlight_html(text) + '</div>')
 
 
 # ── Human-review workflow helpers ────────────────────────────────────────
@@ -511,19 +516,17 @@ def _render_human_review_card(result: dict, ruling: dict, selected_id: str):
     if not saved_review:
         # --- No saved review yet: show the pending card + review button -------
         _esc_detail_html = ""
-        if _model_ruling is not None:
+        original = result.get("original_ai_ruling", {})
+        if original.get("ruling") == "human_review":
+            _esc_detail_html = _highlight_html(original.get("rationale") or ruling["rationale"])
+        elif _model_ruling is not None:
             _esc_detail_html = (
-                f"The model recommended <strong>{_escape_md(_model_ruling)}</strong>, which differs "
-                f"from the deterministic policy baseline <strong>{_escape_md(policy_version or 'demo-v1')}</strong>. "
-                "The protective mismatch check escalated this to human review."
-            )
-        elif _esc_reason and "confidence" in _esc_reason.lower():
-            _esc_detail_html = (
-                "The model's confidence fell below the review threshold, "
-                "so the policy validator escalated this to human review."
+                "The model recommendation conflicts with the policy check. "
+                "The result is pending human review; no refund is authorised. "
+                + _highlight_html(_esc_reason or "")
             )
         else:
-            _esc_detail_html = _escape_md(_esc_reason or ruling.get("rationale", ""))
+            _esc_detail_html = _highlight_html(_esc_reason or ruling.get("rationale", ""))
 
         _html(f"""
         <div class="card" style="background:#fef2f2;border:2px solid #b91c1c;">
@@ -1273,11 +1276,11 @@ if result and result.get("trip_id") == selected_id:
     with why_col:
         with st.container(border=True, key="why_card"):
             st.markdown("**Why this outcome?**")
-            _rationale = _saved_hr["final_explanation"] if _saved_hr else ruling["rationale"]
-            if human_review and not _saved_hr:
-                _html('<div style="color:#991b1b;line-height:1.65;">' + _highlight_html(_rationale) + '</div>')
-            else:
-                st.markdown(_bold_decisive(_escape_md(_rationale)))
+            _rationale = _saved_hr["final_explanation"] if _saved_hr else (
+                result.get("original_ai_ruling", {}).get("rationale", ruling["rationale"])
+                if result.get("original_ai_ruling", {}).get("ruling") == "human_review"
+                else ruling["rationale"])
+            _public_explanation(_rationale, urgent=human_review and not _saved_hr)
             st.caption("Human reviewer explanation" if _saved_hr else "Based on the supplied evidence and policy")
 
     with ev_col:
@@ -1367,8 +1370,8 @@ if result and result.get("trip_id") == selected_id:
             </div>
             """)
         with a3:
-            judge_summary = _escape_md(ruling["rationale"])
-            _html(f"""
+            judge_summary = _highlight_html(result.get("original_ai_ruling", {}).get("rationale", ruling["rationale"]))
+            st.html(f"""
             <div class="agent-card">
                 <div class="agent-icon" style="background:{MINT_CARD};color:{PRIMARY_GREEN};">⚖</div>
                 <div class="agent-name">Judge</div>

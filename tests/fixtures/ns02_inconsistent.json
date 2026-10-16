@@ -1,0 +1,18 @@
+{
+  "ruling": "refund",
+  "refund_cents": 500,
+  "confidence": 0.95,
+  "rationale": "Case NS02 (no_show_charge). Rider summary: The rider claims they could not find the driver and requests a refund of the S$5 cancellation fee. Driver summary: The driver states they were at the pickup point and waited the required time. Decision: Evidence shows the driver arrived at 16:00 and cancelled at 16:06, with GPS samples at the exact pickup coordinates at 16:00, 16:03, and 16:06. The verified wait is 360 seconds, exceeding the 300-second minimum. However, policy DEMO-NOSHOW-01 requires the driver to stay within 100 metres of the agreed pickup point for at least 300 seconds. The max pickup distance is 0.0 metres, and the observation window is valid. The driver sent a message at 16:00 stating they were at the pickup point. The rider replied at 16:01 saying they could not see the car. No further contact attempts are recorded. The policy does not require contact attempts for a valid cancellation fee; it only requires GPS verification of presence and waiting time. Since GPS evidence confirms the driver was at the pickup point for the full required period, the cancellation fee is valid under the demo policy. However, the rider's complaint indicates a possible mismatch in locating the vehicle, but the policy's sole condition is GPS-verified presence. Therefore, no refund is due under the strict terms. Yet, given the rider's inability to locate the driver despite proximity, and the lack of additional contact attempts (like a phone call) which might have resolved the situation, a discretionary refund could be considered. However, the demo policy does not provide for discretion. The disputed amount is SGD 5 (500 cents), below the SGD 10 threshold for escalation. Confidence is an uncalibrated estimate. Based on the evidence and policy, the cancellation fee is valid, so the ruling should be no_action. But the user complaint explicitly requests a refund, and the evidence shows the driver waited the required time, so the fee is justified. I will follow the policy strictly.",
+  "evidence_ids": [
+    "NS02:get_trip",
+    "NS02:get_messages",
+    "NS02:get_payment",
+    "NS02:get_metrics",
+    "NS02:get_policy"
+  ],
+  "policy_ids": [
+    "DEMO-NOSHOW-01"
+  ],
+  "rider_message": "We recommend no refund of the cancellation fee. According to the applicable demo policy (DEMO-NOSHOW-01), the fee is valid because GPS evidence shows the driver remained at the pickup location for the required waiting period. The driver also sent a message upon arrival. While you reported difficulty locating the driver, the policy does not provide for a refund in this situation.",
+  "driver_message": "The proposed resolution is to retain the cancellation fee. The evidence confirms you arrived at the pickup point and waited for the required duration, as verified by GPS. Your message to the rider at arrival was also documented. The rider's inability to locate you does not invalidate the fee under the current policy."
+}

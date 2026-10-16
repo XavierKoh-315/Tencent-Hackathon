@@ -1,0 +1,18 @@
+{
+  "ruling": "human_review",
+  "refund_cents": 0,
+  "confidence": 0.0,
+  "rationale": "Rider summary: Missing Rider Advocate report. Driver summary: Missing Driver Advocate report. Decision: Both advocate reports are missing, preventing proper evaluation of the route deviation and fare dispute. The complaint involves a driver taking a longer route without asking and charging more than reference fare. Evidence retrieved shows actual distance 6289.3m vs reference 4446.7m (deviation ratio 1.41), charged 1700 cents vs reference 1200 cents. Policy DEMO-ROUTE-01 applies with deviation ratio threshold 1.2. However, without advocate reports presenting each party's arguments, human review is required. Confidence is an uncalibrated estimate.",
+  "evidence_ids": [
+    "RT01:get_trip",
+    "RT01:get_payment",
+    "RT01:get_messages",
+    "RT01:get_metrics",
+    "RT01:get_policy"
+  ],
+  "policy_ids": [
+    "DEMO-ROUTE-01"
+  ],
+  "rider_message": "We recommend human review because necessary advocate reports are missing for proper evaluation of your route deviation and fare dispute claim.",
+  "driver_message": "We recommend human review because necessary advocate reports are missing for proper evaluation of the route deviation and fare dispute."
+}

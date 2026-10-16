@@ -13,6 +13,8 @@ import urllib.parse
 import urllib.request
 import uuid
 
+from .prompts import MULTI_AGENT_INSTRUCTIONS
+
 
 class ADPError(RuntimeError):
     pass
@@ -270,13 +272,14 @@ def review_text(events) -> tuple[str, list[dict]]:
     Handles text.delta, text.replace, message.added/done, response.completed,
     and error events per the official ADP API documentation. Tracks separate
     messages by MessageId. The **last** reply message is selected as the Judge's
-    final ruling — advocate reports, tool outputs and thought messages are
-    excluded from the returned text but their metadata appears in *activity*.
+    final ruling. An explicitly labelled advocate final reply is rejected.
+    Tool outputs and thought messages are excluded from the returned text but their metadata appears in *activity*.
 
     This prevents concatenating multiple reply messages (e.g. advocate reports
     + judge ruling) into a single string that would be invalid JSON.
     """
     types, chunks, completed, reply_order = {}, {}, {}, []
+    agents = {}
     activity: list[dict] = []
     stream_finished = False
 
@@ -304,7 +307,9 @@ def review_text(events) -> tuple[str, list[dict]]:
             msg = event.get("Message", {})
             real_mid = msg.get("MessageId", mid)
             types[real_mid] = msg.get("Type", "")
-            extra = msg.get("ExtraInfo", {})
+            extra = msg.get("ExtraInfo", {}) or {}
+            if extra.get("AgentName"):
+                agents[real_mid] = extra["AgentName"]
             activity.append({"event": "message_added", "detail": {
                 "type": msg.get("Type", ""), "name": msg.get("Name", ""),
                 "title": msg.get("Title", ""), "status": msg.get("Status", ""),
@@ -322,7 +327,9 @@ def review_text(events) -> tuple[str, list[dict]]:
             msg = event.get("Message", {})
             msg_id = msg.get("MessageId", mid)
             types[msg_id] = msg.get("Type", types.get(msg_id, ""))
-            extra = msg.get("ExtraInfo", {})
+            extra = msg.get("ExtraInfo", {}) or {}
+            if extra.get("AgentName"):
+                agents[msg_id] = extra["AgentName"]
             activity.append({"event": "message_done", "detail": {
                 "type": msg.get("Type", ""), "status": msg.get("Status", ""),
                 "agent": extra.get("AgentName", ""),
@@ -343,6 +350,9 @@ def review_text(events) -> tuple[str, list[dict]]:
             for msg in resp.get("Messages", []):
                 msg_id = msg.get("MessageId", "")
                 types[msg_id] = msg.get("Type", "")
+                origin = (msg.get("ExtraInfo", {}) or {}).get("AgentName")
+                if origin:
+                    agents[msg_id] = origin
                 if msg.get("Type") == "reply":
                     text_val = "".join(c.get("Text", "") for c in msg.get("Contents", [])
                                        if c.get("Type") == "text")
@@ -371,6 +381,7 @@ def review_text(events) -> tuple[str, list[dict]]:
     # If only delta/replace chunks exist (no message.done/completed), fall
     # back to the last reply's accumulated chunks.
     text = ""
+    last_mid = None
     if reply_order:
         last_mid = reply_order[-1]
         text = completed.get(last_mid, "").strip()
@@ -382,6 +393,12 @@ def review_text(events) -> tuple[str, list[dict]]:
                            if msg_id == last_mid).strip()
     if not text:
         raise ADPError("ADP completed without a text reply.")
+    origin = str(agents.get(last_mid, "")).strip().lower()
+    if origin in {"rider advocate", "driver advocate"}:
+        error = ADPError("ADP ended with an advocate reply instead of the Judge's final ruling. Check report handoffs to Judge.")
+        error.final_reply_text = text
+        error.final_reply_agent = agents[last_mid]
+        raise error
     return text, activity
 
 
@@ -460,14 +477,7 @@ class ADPClient:
             "case_id": case_id,
             "complaint": complaint,
             "output_language": "English",
-            "output_instruction": (
-                "Write generated reports and explanations in English. "
-                "Intermediate agents must perform their configured tool calls "
-                "and handoffs. Their report payloads must follow their saved "
-                "report schemas. Only the final user-facing Judge reply must be "
-                "exactly one JSON object matching the saved Judge schema, "
-                "without surrounding prose or Markdown."
-            ),
+            "output_instruction": MULTI_AGENT_INSTRUCTIONS,
         }
         if evidence_ids is not None:
             payload["evidence_ids"] = evidence_ids
@@ -528,7 +538,8 @@ class ADPClient:
                 "event_types": event_types,
                 "message_ids": message_ids,
                 "completion_status": completion_status,
-                "final_reply_text": text or "\n---\n".join(raw_reply_texts),
+                "final_reply_text": text or getattr(exc, "final_reply_text", "") or "\n---\n".join(raw_reply_texts),
+                "final_reply_agent": getattr(exc, "final_reply_agent", ""),
                 "activity_event_count": len(activity),
             }
             raise

@@ -68,6 +68,26 @@ class WorkflowTests(unittest.TestCase):
                 # HTML must not become visible Markdown source-code blocks.
                 self.assertFalse(any('<div class="card"' in c.value for c in at.code))
 
+    def test_dollar_amounts_and_bold_prose_never_enter_math_parser(self):
+        at, result = self.app("NS01")
+        text = ("Rider was charged $5. **Evidence shows the driver was 333.6 meters away.** "
+                "The driver waited **360 seconds**. Refund the **$5** (500 cents). "
+                "Policy **DEMO-NOSHOW-01** applies. <script>alert('x')</script>")
+        result["ruling"]["rationale"] = text
+        at.session_state["result"] = result
+        at.run()
+        self.assertFalse(at.exception, str(at.exception))
+        blocks = [e.proto.body for e in at.get("html")]
+        prose = next(body for body in blocks if 'class="public-explanation"' in body)
+        self.assertIn("Evidence shows the driver was 333.6 meters away.", prose)
+        self.assertIn("<strong>$5</strong>", prose)
+        self.assertIn("<strong>360 seconds</strong>", prose)
+        self.assertIn("<strong>DEMO-NOSHOW-01</strong>", prose)
+        self.assertNotIn("**", prose)
+        self.assertNotIn("<script>", prose)
+        self.assertIn("&lt;script&gt;", prose)
+        self.assertFalse(any("Rider was charged" in m.value for m in at.markdown))
+
     def test_refund_choice_updates_amount_immediately_and_saves(self):
         at, result = self.app()
         original = copy.deepcopy(result)

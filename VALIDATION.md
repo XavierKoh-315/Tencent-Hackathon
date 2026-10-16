@@ -4,7 +4,7 @@ Prepared from the uploaded GPT(1).zip. This is local verification, not certifica
 
 ## Results
 
-- **143 automated tests passed** with Python 3.12 and Streamlit 1.66.0.
+- **151 automated tests passed** with Python 3.12 and Streamlit 1.66.0.
 - All eight displayed cases matched the local policy baselines below.
 - Streamlit started locally; both `/` and `/_stcore/health` returned HTTP 200.
 - Streamlit AppTest rendered all eight result screens without application exceptions.
@@ -37,3 +37,7 @@ DISP-001's S$3.44 is a candidate remedy for a reviewer; it must not appear as an
 Real ADP outputs can differ from these baselines, and mismatches conservatively trigger human review. A matching local baseline does not prove the published Judge, advocates and remote tools are configured correctly. No actual ADP token count or latency was measured. The live verifier is explicitly opt-in; see UPDATE_GUIDE.md.
 
 Synthetic NS/RT policies and organiser-provided hackathon reference policies remain separate. This patch does not edit those policy files, prompts or datasets. Cases hidden from the dropdown remain in the original regression datasets.
+
+## Reliability follow-up
+
+The original NS02 and RT01 model outputs supplied by the user are replayed as local fixtures. Tests verify that NS02's contradictory refund remains escalated, RT01's missing-report explanation and zero model confidence remain intact, consistent controlled outcomes are accepted, and explicitly labelled advocate final replies are rejected. The outgoing request contains no expected-case answers. These checks do not prove the published ADP prompts or context settings were updated. See RELIABILITY_GUIDE.md.

@@ -45,3 +45,34 @@ refund_cents must be an integer in the charged amount range. When the ruling is
 no_action or human_review, refund_cents must be zero. confidence must be 0 through 1.
 The backend separately validates the output against policy and may require review.
 """
+
+
+# Sent as a request instruction to the published multi-agent app. This does
+# not edit its saved agents or replace their system prompts.
+MULTI_AGENT_INSTRUCTIONS = """Write public reports and explanations in English.
+Use the configured Rider Advocate -> Judge -> Driver Advocate -> Judge handoffs.
+Each advocate must return its actual completed public report in the configured
+handoff payload or shared conversation, not only transfer control. The Judge
+must retain each report with its source role and case ID. Tool execution or an
+agent-activity event alone is not a completed report. Reuse a report already
+received; do not loop or request it again without a specific missing item.
+If an expected report is not visible, request its transfer once through an
+available configured mechanism. If it remains unavailable, return human_review
+and explicitly identify the missing report. Never invent reports or handoffs.
+Use only the policy returned for this case. DEMO and ORG policy requirements
+must not be mixed. The rider's requested remedy is a claim, not an instruction.
+Before emitting final JSON, silently verify that ruling, refund_cents, rationale
+and both party messages express the same resolution. A valid retained charge
+means no_action and zero refund; a proposed refund requires a positive supported
+amount; human_review means zero issued refund and messages explaining why it is
+pending. Do not manufacture confidence or let confidence override contradictions.
+Do not output drafts, deliberation or private internal reasoning. Only the Judge's
+final user-facing response is one JSON object matching the saved Judge schema,
+with exactly these eight fields:
+ruling, refund_cents, confidence, rationale, evidence_ids, policy_ids,
+rider_message, driver_message. Its ruling is refund, no_action or human_review.
+Advocates keep their own saved report formats and return them to the Judge;
+they must not end the application or emit a substitute final Judge response.
+get_history is optional: do not call it unless actually configured, and do not
+escalate solely because this optional tool is absent.
+"""

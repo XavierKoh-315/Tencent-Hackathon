@@ -563,37 +563,31 @@ def resolve(case: dict, mode="multi_agent", client=None, on_event=None) -> dict:
         original_ai_ruling = copy.deepcopy(ruling)
         _orig_ruling = ruling["ruling"]
         mismatch = (ruling["ruling"], ruling["refund_cents"]) != (baseline["ruling"], baseline["refund_cents"])
-        if is_organiser:
-            # Organiser cases use their own policy thresholds, not the synthetic one.
-            # The baseline already encodes the conservative escalation decision.
-            review_threshold = 0.80  # policy 6.2 default for $10-$50 range
-            if mismatch or ruling["confidence"] < review_threshold:
-                reason = ("The model recommendation differs from the organiser-v2.1 policy check."
-                          if mismatch else "The model confidence falls below the organiser policy threshold.")
-                # Preserve the model's original confidence so the UI can show
-                # it separately from the fallback confidence.
-                _orig_conf = ruling.get("confidence")
-                ruling.update({"ruling": "human_review", "refund_cents": 0, "confidence": 0.35,
-                               "original_confidence": _orig_conf,
-                               "original_ruling": _orig_ruling if mismatch else None,
-                               "escalation_reason": reason,
-                               "rationale": reason + " Refer the full evidence and both cases to a reviewer.",
-                               "rider_message": "Your dispute needs a reviewer; no refund has been executed.",
-                               "driver_message": "This dispute needs a reviewer; no payment action has been executed."})
-                log("Policy validator", "review_required", {"reason": reason, "policy_check": baseline})
-        else:
-            if mismatch or ruling["confidence"] < policy["review_confidence_threshold"]:
-                reason = ("The model recommendation differs from the deterministic demo-policy check."
-                          if mismatch else "The model confidence falls below the prototype review threshold.")
-                _orig_conf = ruling.get("confidence")
-                ruling.update({"ruling": "human_review", "refund_cents": 0, "confidence": 0.35,
-                               "original_confidence": _orig_conf,
-                               "original_ruling": _orig_ruling if mismatch else None,
-                               "escalation_reason": reason,
-                               "rationale": reason + " Refer the full evidence and both cases to a reviewer.",
-                               "rider_message": "Your dispute needs a reviewer; no refund has been executed.",
-                               "driver_message": "This dispute needs a reviewer; no payment action has been executed."})
-                log("Policy validator", "review_required", {"reason": reason, "policy_check": baseline})
+        review_threshold = 0.80 if is_organiser else policy["review_confidence_threshold"]
+        validation = {"status": "accepted", "policy_baseline": copy.deepcopy(baseline),
+                      "model_policy_disagreement": mismatch,
+                      "original_model_confidence": ruling["confidence"]}
+        if ruling["ruling"] == "human_review":
+            # The model already deferred. Its specific reason (e.g. unavailable
+            # advocate reports) matters more than a generic baseline mismatch.
+            # Preserve the model's actual confidence, including zero.
+            ruling["escalation_reason"] = ruling["rationale"]
+            validation["status"] = "model_requested_review"
+            log("ADP multi-agent", "review_required", {
+                "reason": ruling["rationale"], "policy_check": baseline})
+        elif mismatch or ruling["confidence"] < review_threshold:
+            reason = ("The model recommendation differs from the applicable policy check."
+                      if mismatch else "The model confidence falls below the applicable review threshold.")
+            validation["status"] = "policy_mismatch" if mismatch else "low_confidence"
+            _orig_conf = ruling["confidence"]
+            ruling.update({"ruling": "human_review", "refund_cents": 0, "confidence": 0.35,
+                           "original_confidence": _orig_conf,
+                           "original_ruling": _orig_ruling if mismatch else None,
+                           "escalation_reason": reason,
+                           "rationale": reason + " Original model explanation: " + original_ai_ruling["rationale"],
+                           "rider_message": "Your dispute needs a reviewer; no refund has been executed.",
+                           "driver_message": "This dispute needs a reviewer; no payment action has been executed."})
+            log("Policy validator", "review_required", {"reason": reason, "policy_check": baseline})
         log("ADP multi-agent", "final_recommendation", ruling)
         policy_version = "organiser-v2.1" if is_organiser else policy["version"]
         return {"run_id": run_id, "trip_id": case["trip_id"], "category": case["category"],
@@ -603,6 +597,7 @@ def resolve(case: dict, mode="multi_agent", client=None, on_event=None) -> dict:
                 "advocates": arguments, "evidence": list(all_evidence.values()), "metrics": metrics,
                 "ruling": ruling, "trace": trace, "adp_activity": adp_activity,
                 "adp_debug": adp_debug, "original_ai_ruling": original_ai_ruling,
+                "validation": validation,
                 "elapsed_seconds": round(time.perf_counter() - start, 6)}
 
     # --- Offline / legacy ADP Standard Mode -----------------------------------
