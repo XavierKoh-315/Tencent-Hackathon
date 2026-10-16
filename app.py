@@ -173,11 +173,22 @@ def _css():
     .badge {{
         display: inline-flex;
         align-items: center;
-        gap: 0.35rem;
-        padding: 0.35rem 0.75rem;
+        gap: 0.4rem;
+        padding: 0.75rem 1.25rem;
         border-radius: 999px;
-        font-size: 0.75rem;
+        font-size: 1.125rem;
         font-weight: 600;
+        white-space: nowrap;
+    }}
+    .badge-lg {{
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.75rem 1.25rem;
+        border-radius: 999px;
+        font-size: 1.125rem;
+        font-weight: 600;
+        white-space: nowrap;
     }}
     .badge-green {{
         background: {MINT_CARD};
@@ -298,6 +309,14 @@ def _css():
         align-items: center;
         justify-content: space-between;
     }}
+
+    /* Narrow screens: shrink badge text to avoid overlap with breadcrumb */
+    @media (max-width: 768px) {{
+        .badge, .badge-lg {{
+            font-size: 0.95rem;
+            padding: 0.5rem 0.9rem;
+        }}
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -311,8 +330,8 @@ cases = load_cases()
 case_map = {c["trip_id"]: c for c in cases}
 
 # User-facing dropdown allowlist, in the requested display order.
-DROPDOWN_CASE_IDS = ["NS01", "NS02", "NS03", "RT01", "RT02",
-                     "DISP-003", "NS04", "DISP-001"]
+DROPDOWN_CASE_IDS = ["NS01", "NS02", "NS03", "NS04", "RT01", "RT02",
+                     "DISP-001", "DISP-003"]
 
 # Session-state initialisation.
 if "selected_case" not in st.session_state:
@@ -335,6 +354,48 @@ case = copy.deepcopy(case_map[selected_id])
 
 def _format_category(cat: str) -> str:
     return cat.replace("_", " ").title()
+
+
+def _display_confidence(conf, colour: str = DARK_GREEN) -> str:
+    """Return an HTML span for a confidence value, or 'Not available'."""
+    if conf is not None and isinstance(conf, (int, float)):
+        return (f'<div class="metric-value" style="color:{colour};">'
+                f'{conf:.0%}</div>')
+    return f'<div class="metric-value" style="color:{colour};">Not available</div>'
+
+
+def _escape_md(text: str) -> str:
+    """Escape markdown special characters in untrusted text so it renders
+    as literal content, not formatting or raw HTML."""
+    if not text:
+        return ""
+    return (
+        text
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("[", "\\[")
+        .replace("]", "\\]")
+        .replace("`", "\\`")
+    )
+
+
+import re as _re
+
+def _bold_decisive(text: str) -> str:
+    """Bold decisive amounts, distances, durations and policy references
+    in escaped rationale text. Preserves negations and uncertainty."""
+    if not text:
+        return ""
+    # Bold monetary amounts: S$5, S$4.50, etc.
+    text = _re.sub(r'(S\$[\d,.]+)', r'**\1**', text)
+    # Bold distances: 4.3 km, 100 m, etc.
+    text = _re.sub(r'(\d+\.?\d*\s*(?:km|m))\b', r'**\1**', text)
+    # Bold durations: 5 min, 300 seconds, 6 min, etc.
+    text = _re.sub(r'(\d+\.?\d*\s*(?:min|minutes|seconds|sec))\b', r'**\1**', text)
+    # Bold policy clause references: DEMO-NOSHOW-01, DEMO-ROUTE-01
+    text = _re.sub(r'(DEMO-[A-Z]+-\d+)', r'**\1**', text)
+    return text
 
 
 # ── Sidebar ─────────────────────────────────────────────────────────────
@@ -430,10 +491,10 @@ else:
     effective_status = "ready"
 
 _badge = {
-    "ready": '<span class="badge badge-grey">Ready to investigate</span>',
-    "investigating": '<span class="badge badge-amber">Investigating…</span>',
-    "completed": '<span class="badge badge-green"><span>✓</span> Investigation completed</span>',
-    "failed": '<span class="badge badge-red">Investigation failed</span>',
+    "ready": '<span class="badge-lg badge-grey">Ready to investigate</span>',
+    "investigating": '<span class="badge-lg badge-amber">Investigating…</span>',
+    "completed": '<span class="badge-lg badge-green"><span>✓</span> Investigation completed</span>',
+    "failed": '<span class="badge-lg badge-red">Investigation failed</span>',
 }
 
 
@@ -678,55 +739,66 @@ if result and result.get("trip_id") == selected_id:
     st.markdown("<div style='margin-top:1.25rem;'></div>", unsafe_allow_html=True)
 
     if human_review:
-        # ── Human-review branch: native Streamlit rendering ──────────────
-        # The HTML card was rendered as a raw code block in some Streamlit
-        # versions. Use native containers/columns instead for reliability.
-        with st.container():
-            st.markdown(f"""
-            <div class="card" style="background:{MINT_CARD};border-color:#c5e8dc;">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
-                    <div style="display:flex;align-items:center;gap:0.5rem;">
-                        <span style="font-size:1rem;">🛡</span>
-                        <span style="font-weight:600;color:#1a3c34;font-size:0.9rem;">Resolution recommendation</span>
-                    </div>
-                    <span class="badge badge-red">Human review required</span>
-                </div>
-                <div style="font-size:1.15rem;font-weight:700;color:#1a3c34;margin-bottom:0.75rem;">Human review required</div>
-            """, unsafe_allow_html=True)
+        # ── Human-review branch: unified 3-column card, red-styled ────────
+        # Determine the actual model confidence (before mismatch override)
+        # vs. the fallback confidence applied by the policy validator.
+        _model_conf = ruling.get("original_confidence")
+        _model_ruling = ruling.get("original_ruling")
+        _esc_reason = ruling.get("escalation_reason") or _escalation_reason or ""
 
-            # Brief explanation using the actual validated rationale or
-            # recorded backend escalation reason.
-            st.markdown(ruling["rationale"])
-            if _escalation_reason:
-                st.caption(f"Backend escalation reason: {_escalation_reason}")
-            st.caption(f"Policy version: {result['policy_version']}")
-
-            # Three metric columns, adapted for human_review.
-            _r1, _r2, _r3 = st.columns(3)
-            with _r1:
-                st.caption("Recommended outcome")
-                st.markdown(f"**{outcome_label}**")
-            with _r2:
-                st.caption("Proposed refund")
-                st.markdown("**Refund decision pending human review**")
-                st.caption("refund_cents = 0 in JSON contract")
-            with _r3:
-                st.caption("Confidence")
-                _conf = ruling.get("confidence")
-                if _conf is not None and isinstance(_conf, (int, float)):
-                    st.markdown(
-                        f'<span style="font-size:1.5rem;font-weight:700;color:#b91c1c;">{_conf:.0%}</span>',
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    st.markdown("**Not available**")
-                st.caption("Uncalibrated model estimate")
-
-            st.caption(
-                "Recommendation only. Confidence is a prototype heuristic, not calibrated accuracy. "
-                f"· Measured run time: {result['elapsed_seconds']:.3f}s"
+        # Distinguish the actual escalation cause: mismatch (model vs.
+        # policy) or low confidence.  Do not always claim "could not decide".
+        if _model_ruling is not None:
+            _esc_detail = (
+                f"The model recommended <strong>{_escape_md(_model_ruling)}</strong>, which differs "
+                f"from the deterministic policy baseline <strong>{_escape_md(result.get('policy_version', 'demo-v1'))}</strong>. "
+                "The protective mismatch check escalated this to human review."
             )
-            st.markdown("</div>", unsafe_allow_html=True)
+        elif "confidence" in _esc_reason.lower():
+            _esc_detail = (
+                "The model's confidence fell below the review threshold, "
+                "so the policy validator escalated this to human review."
+            )
+        else:
+            _esc_detail = _escape_md(_esc_reason or ruling["rationale"])
+
+        st.markdown(f"""
+        <div class="card" style="background:#fef2f2;border:2px solid #b91c1c;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+                <div style="display:flex;align-items:center;gap:0.5rem;">
+                    <span style="font-size:1rem;">🛡</span>
+                    <span style="font-weight:600;color:#7f1d1d;font-size:0.9rem;">Resolution recommendation</span>
+                </div>
+                <span style="display:inline-flex;align-items:center;gap:0.35rem;padding:0.35rem 0.85rem;border-radius:999px;background:#b91c1c;color:#ffffff;font-weight:700;font-size:0.8rem;">⚠ Human review required</span>
+            </div>
+            <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:1.5rem;">
+                <div style="border-right:1px solid #fecaca;padding-right:1rem;">
+                    <div class="metric-label" style="color:#7f1d1d;">Recommended outcome</div>
+                    <div class="metric-value" style="display:flex;align-items:center;gap:0.5rem;color:#7f1d1d;">
+                        <span style="width:28px;height:28px;border-radius:50%;background:#b91c1c;color:white;display:inline-flex;align-items:center;justify-content:center;font-size:0.9rem;">!</span>
+                        Human review required
+                    </div>
+                    <div class="metric-sub" style="color:#991b1b;">{result['policy_version']}</div>
+                </div>
+                <div style="border-right:1px solid #fecaca;padding-right:1rem;">
+                    <div class="metric-label" style="color:#7f1d1d;">Refund decision</div>
+                    <div class="metric-value" style="color:#7f1d1d;">Pending human review</div>
+                    <div class="metric-sub" style="color:#991b1b;">No refund executed</div>
+                </div>
+                <div>
+                    <div class="metric-label" style="color:#7f1d1d;">Model confidence</div>
+                    {_display_confidence(_model_conf, "#b91c1c")}
+                    <div class="metric-sub" style="color:#991b1b;">Uncalibrated model estimate</div>
+                </div>
+            </div>
+            <div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid #fecaca;color:#7f1d1d;font-size:0.85rem;line-height:1.5;">
+                {_esc_detail}
+            </div>
+            <div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid #fecaca;">
+                <span class="muted" style="font-size:0.75rem;color:#991b1b;">Recommendation only. Confidence is a prototype heuristic, not calibrated accuracy. · Policy: {result['policy_version']} · Measured run time: {result["elapsed_seconds"]:.3f}s</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
     else:
         # ── Normal (refund / no_action) branch: existing HTML card ────────
@@ -770,16 +842,24 @@ if result and result.get("trip_id") == selected_id:
     why_col, ev_col = st.columns([2, 1])
 
     with why_col:
-        st.markdown(f"""
+        st.markdown("""
         <div class="card" style="height:100%;">
             <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
                 <span style="font-size:1rem;">📋</span>
                 <span class="card-title" style="margin:0;">Why this outcome?</span>
             </div>
-            <div style="color:#1f2937;font-size:0.95rem;line-height:1.6;margin-bottom:1rem;">
-                {ruling["rationale"]}
-            </div>
-            <div style="display:flex;align-items:center;gap:0.4rem;color:#0d7a5e;font-size:0.8rem;font-weight:500;">
+        """, unsafe_allow_html=True)
+
+        # Render the rationale as escaped markdown text with paragraph
+        # separation.  Bold key terms by pattern-matching amounts, distances,
+        # durations and policy references without another AI call.
+        _rationale = ruling["rationale"]
+        _esc_rationale = _escape_md(_rationale)
+        _bold_rationale = _bold_decisive(_esc_rationale)
+        st.markdown(_bold_rationale)
+
+        st.markdown("""
+            <div style="display:flex;align-items:center;gap:0.4rem;color:#0d7a5e;font-size:0.8rem;font-weight:500;margin-top:0.5rem;">
                 <span>✓</span> Grounded in trip, message, route and payment evidence
             </div>
         </div>
@@ -872,7 +952,7 @@ if result and result.get("trip_id") == selected_id:
             </div>
             """, unsafe_allow_html=True)
         with a3:
-            judge_summary = ruling["rationale"]
+            judge_summary = _escape_md(ruling["rationale"])
             st.markdown(f"""
             <div class="agent-card">
                 <div class="agent-icon" style="background:{MINT_CARD};color:{PRIMARY_GREEN};">⚖</div>
