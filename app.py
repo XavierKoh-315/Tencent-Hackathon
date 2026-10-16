@@ -425,7 +425,12 @@ _badge = {
     "completed": '<span class="badge badge-green"><span>✓</span> Investigation completed</span>',
     "failed": '<span class="badge badge-red">Investigation failed</span>',
 }
-status_badge = _badge[effective_status]
+
+
+def _badge_html(status: str) -> str:
+    return f"""<div style="display:flex;justify-content:flex-end;align-items:flex-end;
+    height:100%;padding-bottom:0.35rem;">{_badge[status]}</div>"""
+
 
 st.markdown(f"""
 <div class="top-bar">
@@ -444,12 +449,10 @@ with head_col1:
     st.markdown('<div class="eyebrow">Evidence-led resolution</div>', unsafe_allow_html=True)
     st.markdown('<h1 class="page-title">Ride Dispute Review</h1>', unsafe_allow_html=True)
     st.markdown('<div class="page-subtitle">Three specialised AI agents. Every perspective considered.</div>', unsafe_allow_html=True)
-with head_col2:
-    st.markdown(f"""
-    <div style="display:flex;justify-content:flex-end;align-items:flex-end;height:100%;padding-bottom:0.35rem;">
-        {status_badge}
-    </div>
-    """, unsafe_allow_html=True)
+# Updateable placeholder so the badge can switch to "Investigating…" before
+# the blocking network request begins, without a full page rerun.
+status_placeholder = head_col2.empty()
+status_placeholder.markdown(_badge_html(effective_status), unsafe_allow_html=True)
 
 st.markdown("<div style='margin-bottom:1.25rem;'></div>", unsafe_allow_html=True)
 
@@ -482,7 +485,10 @@ with st.form("complaint_form"):
 
     c1, c2 = st.columns([4, 1])
     with c2:
-        submitted = st.form_submit_button("⚡ Investigate dispute", type="primary", use_container_width=True)
+        submitted = st.form_submit_button(
+            "⚡ Investigate dispute", type="primary", use_container_width=True,
+            disabled=st.session_state.get("executing", False),
+        )
     st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -495,6 +501,10 @@ if submitted and not st.session_state["executing"]:
     # Mark investigating for this case so the badge shows yellow during the
     # request, before the response returns.
     st.session_state["status_by_case"][selected_id] = "investigating"
+    # Render the yellow badge IMMEDIATELY, before evidence loading or the
+    # blocking network request begins. This updates the placeholder created
+    # above in the page heading area.
+    status_placeholder.markdown(_badge_html("investigating"), unsafe_allow_html=True)
     case["complaint"] = complaint.strip()
     if not case["complaint"]:
         st.session_state["status_by_case"][selected_id] = "ready"
@@ -550,6 +560,16 @@ if submitted and not st.session_state["executing"]:
             st.caption("ADP returned a response but it did not pass the project's result validator. No fabricated fields were accepted.")
             val_debug = getattr(exc, "validation_debug", None)
             if val_debug:
+                # Enrich with ADP debug metadata (MessageIds, completion status,
+                # final reply text) so the diagnostic expander can show the
+                # actual ruling value, selected MessageId and stream status.
+                _adp_dbg = getattr(exc, "debug_info", None) or st.session_state.get("adp_debug")
+                if _adp_dbg:
+                    val_debug["adp_event_types"] = _adp_dbg.get("event_types", [])
+                    val_debug["adp_message_ids"] = _adp_dbg.get("message_ids", [])
+                    val_debug["adp_completion_status"] = _adp_dbg.get("completion_status", "N/A")
+                    val_debug["adp_final_reply_text"] = _adp_dbg.get("final_reply_text", "")
+                    val_debug["adp_activity_event_count"] = _adp_dbg.get("activity_event_count", 0)
                 st.session_state["validation_debug"] = val_debug
             st.session_state["status_by_case"][selected_id] = "failed"
         except (ValueError, OSError) as exc:
@@ -582,7 +602,24 @@ if adp_debug:
 
 val_debug = st.session_state.get("validation_debug")
 if val_debug:
-    with st.expander("Validation diagnostics — evidence and policy IDs"):
+    with st.expander("Validation diagnostics — received output and schema check"):
+        # Show the actual ruling value from the received JSON.
+        _jr = val_debug.get("judge_ruling_json") or {}
+        _actual_ruling = _jr.get("ruling", "(missing)")
+        st.write(f"**Actual ruling value:** `{_actual_ruling}`")
+        st.write(f"**Valid rulings:** `refund`, `no_action`, `human_review`")
+
+        # Show ADP-side metadata (MessageIds, completion status, raw reply).
+        if val_debug.get("adp_completion_status"):
+            st.write(f"**Stream completion status:** `{val_debug['adp_completion_status']}`")
+        if val_debug.get("adp_event_types"):
+            st.write("**Event types received:**")
+            st.text(", ".join(val_debug["adp_event_types"]))
+        if val_debug.get("adp_message_ids"):
+            st.write("**Messages by MessageId:**")
+            st.dataframe(val_debug["adp_message_ids"], hide_index=True)
+
+        # Show evidence and policy IDs side by side.
         col_a, col_b = st.columns(2)
         with col_a:
             st.write("**Judge's evidence_ids:**")
@@ -594,8 +631,17 @@ if val_debug:
             st.json(val_debug.get("judge_policy_ids"))
             st.write("**Accepted policy IDs:**")
             st.json(val_debug.get("accepted_policy_ids"))
+
         st.write("**Full Judge JSON (as received):**")
-        st.json(val_debug.get("judge_ruling_json"))
+        st.json(_jr)
+
+        _raw = val_debug.get("adp_final_reply_text", "")
+        if _raw:
+            st.write("**Raw reply text (as parsed from SSE):**")
+            st.code(_raw[:5000], language="text")
+            if len(_raw) > 5000:
+                st.caption(f"Truncated — full text is {len(_raw)} characters.")
+        st.caption("No credentials or private reasoning are exposed.")
 
 
 # ── Result area ─────────────────────────────────────────────────────────
@@ -610,42 +656,104 @@ if result and result.get("trip_id") == selected_id:
     outcome_label = labels[ruling["ruling"]]
     human_review = ruling["ruling"] == "human_review"
 
+    # Determine the real escalation reason from the trace, if any.
+    _escalation_reason = None
+    _trace = result.get("trace", [])
+    for _entry in _trace:
+        if _entry.get("event") == "review_required":
+            _escalation_reason = _entry.get("detail", {}).get("reason")
+            break
+
     # Resolution card
     st.markdown("<div style='margin-top:1.25rem;'></div>", unsafe_allow_html=True)
-    st.markdown(f"""
-    <div class="card" style="background:{MINT_CARD};border-color:#c5e8dc;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
-            <div style="display:flex;align-items:center;gap:0.5rem;">
-                <span style="font-size:1rem;">🛡</span>
-                <span style="font-weight:600;color:#1a3c34;font-size:0.9rem;">Resolution recommendation</span>
-            </div>
-            {"" + (f'<span class="badge badge-amber">Human review required</span>' if human_review else f'<span class="badge badge-grey">AI recommendation</span>') + ""}
-        </div>
-        <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:1.5rem;">
-            <div style="border-right:1px solid #c5e8dc;padding-right:1rem;">
-                <div class="metric-label">Recommended outcome</div>
-                <div class="metric-value" style="display:flex;align-items:center;gap:0.5rem;">
-                    {"" + (f'<span style="width:28px;height:28px;border-radius:50%;background:#0d7a5e;color:white;display:inline-flex;align-items:center;justify-content:center;font-size:0.9rem;">✓</span>' if ruling["ruling"] == "refund" else '') + ""}
-                    {outcome_label}
+
+    if human_review:
+        # ── Human-review branch: native Streamlit rendering ──────────────
+        # The HTML card was rendered as a raw code block in some Streamlit
+        # versions. Use native containers/columns instead for reliability.
+        with st.container():
+            st.markdown(f"""
+            <div class="card" style="background:{MINT_CARD};border-color:#c5e8dc;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+                    <div style="display:flex;align-items:center;gap:0.5rem;">
+                        <span style="font-size:1rem;">🛡</span>
+                        <span style="font-weight:600;color:#1a3c34;font-size:0.9rem;">Resolution recommendation</span>
+                    </div>
+                    <span class="badge badge-red">Human review required</span>
                 </div>
-                <div class="metric-sub">{result['policy_version']}</div>
+                <div style="font-size:1.15rem;font-weight:700;color:#1a3c34;margin-bottom:0.75rem;">Human review required</div>
+            """, unsafe_allow_html=True)
+
+            # Brief explanation using the actual validated rationale or
+            # recorded backend escalation reason.
+            st.markdown(ruling["rationale"])
+            if _escalation_reason:
+                st.caption(f"Backend escalation reason: {_escalation_reason}")
+            st.caption(f"Policy version: {result['policy_version']}")
+
+            # Three metric columns, adapted for human_review.
+            _r1, _r2, _r3 = st.columns(3)
+            with _r1:
+                st.caption("Recommended outcome")
+                st.markdown(f"**{outcome_label}**")
+            with _r2:
+                st.caption("Proposed refund")
+                st.markdown("**Refund decision pending human review**")
+                st.caption("refund_cents = 0 in JSON contract")
+            with _r3:
+                st.caption("Confidence")
+                _conf = ruling.get("confidence")
+                if _conf is not None and isinstance(_conf, (int, float)):
+                    st.markdown(
+                        f'<span style="font-size:1.5rem;font-weight:700;color:#b91c1c;">{_conf:.0%}</span>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown("**Not available**")
+                st.caption("Uncalibrated model estimate")
+
+            st.caption(
+                "Recommendation only. Confidence is a prototype heuristic, not calibrated accuracy. "
+                f"· Measured run time: {result['elapsed_seconds']:.3f}s"
+            )
+            st.markdown("</div>", unsafe_allow_html=True)
+
+    else:
+        # ── Normal (refund / no_action) branch: existing HTML card ────────
+        st.markdown(f"""
+        <div class="card" style="background:{MINT_CARD};border-color:#c5e8dc;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+                <div style="display:flex;align-items:center;gap:0.5rem;">
+                    <span style="font-size:1rem;">🛡</span>
+                    <span style="font-weight:600;color:#1a3c34;font-size:0.9rem;">Resolution recommendation</span>
+                </div>
+                <span class="badge badge-grey">AI recommendation</span>
             </div>
-            <div style="border-right:1px solid #c5e8dc;padding-right:1rem;">
-                <div class="metric-label">Proposed refund</div>
-                <div class="metric-value">{money(ruling["refund_cents"])}</div>
-                <div class="metric-sub">Calculated under {ruling['policy_ids'][0] if ruling['policy_ids'] else 'policy'}</div>
+            <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:1.5rem;">
+                <div style="border-right:1px solid #c5e8dc;padding-right:1rem;">
+                    <div class="metric-label">Recommended outcome</div>
+                    <div class="metric-value" style="display:flex;align-items:center;gap:0.5rem;">
+                        {"" + (f'<span style="width:28px;height:28px;border-radius:50%;background:#0d7a5e;color:white;display:inline-flex;align-items:center;justify-content:center;font-size:0.9rem;">✓</span>' if ruling["ruling"] == "refund" else '') + ""}
+                        {outcome_label}
+                    </div>
+                    <div class="metric-sub">{result['policy_version']}</div>
+                </div>
+                <div style="border-right:1px solid #c5e8dc;padding-right:1rem;">
+                    <div class="metric-label">Proposed refund</div>
+                    <div class="metric-value">{money(ruling["refund_cents"])}</div>
+                    <div class="metric-sub">Calculated under {ruling['policy_ids'][0] if ruling['policy_ids'] else 'policy'}</div>
+                </div>
+                <div>
+                    <div class="metric-label">Prototype confidence</div>
+                    <div class="metric-value">{ruling['confidence']:.0%}</div>
+                    <div class="metric-sub">Model self-assessment</div>
+                </div>
             </div>
-            <div>
-                <div class="metric-label">Prototype confidence</div>
-                <div class="metric-value">{ruling['confidence']:.0%}</div>
-                <div class="metric-sub">Model self-assessment</div>
+            <div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid #c5e8dc;">
+                <span class="muted" style="font-size:0.75rem;">Recommendation only. Confidence is a prototype heuristic, not calibrated accuracy. · Measured run time: {result["elapsed_seconds"]:.3f}s</span>
             </div>
         </div>
-        <div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid #c5e8dc;">
-            <span class="muted" style="font-size:0.75rem;">Recommendation only. Confidence is a prototype heuristic, not calibrated accuracy. · Measured run time: {result["elapsed_seconds"]:.3f}s</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
     # Explanation + evidence cards
     st.markdown("<div style='margin-top:1.25rem;'></div>", unsafe_allow_html=True)
