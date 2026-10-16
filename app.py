@@ -589,17 +589,28 @@ def _render_review_dialog(result: dict, ruling: dict, selected_id: str, run_id: 
     # Determine charged amount for the refund cap display.
     _charged = charged_cents_for(result)
 
-    _context_block = f"""
-    **Case ID:** {selected_id}  
-    **Investigation/Run ID:** {run_id}  
-    **Complaint:** {_escape_md(result.get('complaint', 'N/A'))}  
-    **Original AI recommendation:** {ruling.get('original_ruling') or ruling.get('ruling', 'N/A')}  
-    **Model confidence:** {_format_confidence_text(model_confidence_for(result))}  
-    **Escalation reason:** {ruling.get('escalation_reason') or 'N/A'}  
-    **Policy version:** {result.get('policy_version', 'N/A')}
-    """
+    # Render evidence as escaped HTML, never Markdown: paired dollar amounts
+    # in complaints and agent explanations otherwise become LaTeX expressions.
+    _context_rows = [
+        ("Case ID", selected_id),
+        ("Investigation/Run ID", run_id),
+        ("Complaint", result.get("complaint", "N/A")),
+        ("Original AI recommendation", ruling.get("original_ruling") or ruling.get("ruling", "N/A")),
+        ("Model confidence", _format_confidence_text(model_confidence_for(result))),
+        ("Escalation reason", ruling.get("escalation_reason") or "N/A"),
+        ("Policy version", result.get("policy_version", "N/A")),
+    ]
     if _charged is not None:
-        _context_block += f"\n**Charged amount:** {money(int(_charged))}"
+        _context_rows.append(("Charged amount", money(int(_charged))))
+    _context_block = (
+        '<div class="review-context" style="overflow-wrap:anywhere;line-height:1.6">'
+        + "".join(
+            f'<p style="margin:0 0 .5rem"><strong>{html.escape(label)}:</strong> '
+            f'{_highlight_html(str(value))}</p>'
+            for label, value in _context_rows
+        )
+        + '</div>'
+    )
 
     # Try st.dialog (available in Streamlit >= 1.35).
     _use_dialog = hasattr(st, "dialog")
@@ -642,7 +653,7 @@ def _render_review_form_body(
     st.caption("⚠ Demonstration reviewer workflow. A typed reviewer name is not "
                "authentication and must not be presented as verified staff identity.")
     st.markdown("---")
-    st.markdown(context_block)
+    st.html(context_block)
     st.markdown("---")
 
     human_decision = st.selectbox(

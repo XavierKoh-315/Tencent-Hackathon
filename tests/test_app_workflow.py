@@ -88,6 +88,23 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("&lt;script&gt;", prose)
         self.assertFalse(any("Rider was charged" in m.value for m in at.markdown))
 
+    def test_review_context_preserves_dollars_spaces_and_untrusted_text(self):
+        at, result = self.app("DISP-001")
+        result["complaint"] = "The quote was $28 and the fare was $35. <script>bad()</script>"
+        result["ruling"]["escalation_reason"] = (
+            "The dispute is $6.50; a candidate remedy of **$3.44** requires review."
+        )
+        at.session_state["result"] = result
+        at.run()
+        self.open_form(at)
+        context = next(e.proto.body for e in at.get("html") if 'class="review-context"' in e.proto.body)
+        self.assertIn("The quote was <strong>$28</strong> and the fare was <strong>$35</strong>.", context)
+        self.assertIn("<strong>$6.50</strong>", context)
+        self.assertIn("<strong>$3.44</strong>", context)
+        self.assertIn("&lt;script&gt;", context)
+        self.assertNotIn("<script>", context)
+        self.assertFalse(any("The quote was" in m.value for m in at.markdown))
+
     def test_refund_choice_updates_amount_immediately_and_saves(self):
         at, result = self.app()
         original = copy.deepcopy(result)
